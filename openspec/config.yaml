@@ -1,0 +1,31 @@
+schema: spec-driven
+
+context: |
+  Project: AGX, a Rust-native, human-friendly and agent-friendly lifecycle CLI for AI coding agents.
+  Canonical command: agx.
+  Reference implementation: quantex-cli submodule.
+  Product scope: agent installation, inspection, ensure, update, uninstall, discovery, execution, self-upgrade, and stable machine-readable contracts.
+  Non-goal: do not turn AGX into a workflow orchestration platform.
+  Runtime target: Rust native binaries. npm and Bun are installation/self-upgrade channels for Rust binaries, not JavaScript runtime requirements.
+  Agent runtime: Superpowers is preferred when available; skills/agx-agent-runtime/SKILL.md carries AGX-specific intake, validation, artifact-routing, and closure rules.
+  Project memory: OpenSpec owns non-trivial behavior or durable-process changes; ADRs record durable decisions; runbooks record repeatable operations; sessions record discussion summaries.
+  Work intake gate: before implementation or file edits, classify whether the work requires OpenSpec.
+  Delivery closure gate: before reporting completion, check validation, OpenSpec status, git status, commit, push, PR, release, and archive closure as applicable.
+
+rules:
+  proposal:
+    - 'Use the proposal structure: Why, What Changes, Capabilities, Impact.'
+    - Keep scope and non-goals explicit.
+    - State the work-intake classification when the change is created because implementation was requested.
+  specs:
+    - Requirements must use SHALL or MUST.
+    - Scenarios should use Given/When/Then bullets.
+    - Keep implementation details out unless they are externally observable behavior.
+  design:
+    - Include a design document for architecture, migration, release, package distribution, dependency, or security-sensitive changes.
+    - Prefer upstream OpenSpec and GitHub-native workflows over repo-local project-management scripts.
+  tasks:
+    - Include validation commands relevant to the change.
+    - Mark tasks complete only after the corresponding code, docs, or configuration has changed.
+    - Include documentation or project-memory validation tasks for workflow changes.
+    - Include delivery closure tasks when the user asks for continuation or closure.
