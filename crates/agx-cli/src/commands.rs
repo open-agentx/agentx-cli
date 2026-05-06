@@ -7,6 +7,7 @@ use crate::context::CliContext;
 use crate::errors::{AgxError, AgxErrorCode};
 use crate::inspection;
 use crate::output::{CommandResult, CommandTarget};
+use crate::package_manager;
 
 pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
     match command {
@@ -15,11 +16,14 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
         Command::Config { action, key, value } => {
             config_command(action.as_deref(), key.as_deref(), value.as_deref(), context)
         }
+        Command::Ensure { agent } => ensure_command(agent, context),
         Command::Info { agent } => info_command(agent, context),
+        Command::Install { agent } => install_command(agent, context),
         Command::Inspect { agent } => inspect_command(agent, context),
         Command::List => list_command(context),
         Command::Resolve { agent } => resolve_command(agent, context),
         Command::Schema { command } => schema_command(command.as_deref(), context),
+        Command::Uninstall { agent } => uninstall_command(agent, context),
     }
 }
 
@@ -84,6 +88,25 @@ struct ListedAgent {
 struct InfoData {
     agent: AgentInfo,
     inspection: inspection::AgentInspection,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LifecycleData {
+    agent: LifecycleAgent,
+    changed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    install_state: Option<crate::state::InstalledAgentState>,
+    installed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LifecycleAgent {
+    display_name: &'static str,
+    name: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -382,6 +405,28 @@ fn list_command(context: &CliContext) -> CommandResult {
     )
 }
 
+fn install_command(agent_name: &str, context: &CliContext) -> CommandResult {
+    lifecycle_command(
+        "install",
+        agent_name,
+        context,
+        package_manager::install_agent,
+    )
+}
+
+fn ensure_command(agent_name: &str, context: &CliContext) -> CommandResult {
+    lifecycle_command("ensure", agent_name, context, package_manager::ensure_agent)
+}
+
+fn uninstall_command(agent_name: &str, context: &CliContext) -> CommandResult {
+    lifecycle_command(
+        "uninstall",
+        agent_name,
+        context,
+        package_manager::uninstall_agent,
+    )
+}
+
 fn info_command(agent_name: &str, context: &CliContext) -> CommandResult {
     let Some(agent) = agents::resolve_agent(agent_name) else {
         return CommandResult::error(
@@ -489,6 +534,41 @@ fn schema_command(command_name: Option<&str>, context: &CliContext) -> CommandRe
     )
 }
 
+fn lifecycle_command(
+    action: &'static str,
+    agent_name: &str,
+    context: &CliContext,
+    operation: fn(
+        AgentDefinition,
+        &CliContext,
+    ) -> Result<package_manager::LifecycleResult, AgxError>,
+) -> CommandResult {
+    let Some(agent) = agents::resolve_agent(agent_name) else {
+        return agent_not_found_result(action, agent_name, context);
+    };
+
+    match operation(agent, context) {
+        Ok(result) => CommandResult::success(
+            action,
+            LifecycleData {
+                agent: LifecycleAgent {
+                    display_name: agent.display_name,
+                    name: agent.name,
+                },
+                changed: result.changed,
+                install_state: result.install_state,
+                installed: result.installed,
+                message: result.message,
+            },
+            CommandTarget::agent(agent.name),
+            context,
+        ),
+        Err(error) => {
+            CommandResult::error(action, error, CommandTarget::agent(agent.name), context)
+        }
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 fn command_catalog() -> Vec<CommandDescriptor> {
     vec![
@@ -544,6 +624,23 @@ fn command_catalog() -> Vec<CommandDescriptor> {
             flags: vec![
                 "--json",
                 "--output",
+                "--yes",
+                "--quiet",
+                "--color",
+                "--log-level",
+                "--dry-run",
+                "--timeout",
+                "--idempotency-key",
+            ],
+            name: "ensure",
+            output_schema_ref: "#/commands/ensure",
+            stability: "stable",
+            summary: "Ensure an agent is installed",
+        },
+        CommandDescriptor {
+            flags: vec![
+                "--json",
+                "--output",
                 "--quiet",
                 "--color",
                 "--log-level",
@@ -571,6 +668,23 @@ fn command_catalog() -> Vec<CommandDescriptor> {
             output_schema_ref: "#/commands/inspect",
             stability: "stable",
             summary: "Return structured agent state",
+        },
+        CommandDescriptor {
+            flags: vec![
+                "--json",
+                "--output",
+                "--yes",
+                "--quiet",
+                "--color",
+                "--log-level",
+                "--dry-run",
+                "--timeout",
+                "--idempotency-key",
+            ],
+            name: "install",
+            output_schema_ref: "#/commands/install",
+            stability: "stable",
+            summary: "Install an agent",
         },
         CommandDescriptor {
             flags: vec![
@@ -618,6 +732,22 @@ fn command_catalog() -> Vec<CommandDescriptor> {
             stability: "stable",
             summary: "Return structured output schemas",
         },
+        CommandDescriptor {
+            flags: vec![
+                "--json",
+                "--output",
+                "--quiet",
+                "--color",
+                "--log-level",
+                "--dry-run",
+                "--timeout",
+                "--idempotency-key",
+            ],
+            name: "uninstall",
+            output_schema_ref: "#/commands/uninstall",
+            stability: "stable",
+            summary: "Uninstall an agent",
+        },
     ]
 }
 
@@ -657,6 +787,7 @@ fn is_command_available(command: &str) -> bool {
     })
 }
 
+#[allow(clippy::too_many_lines)]
 fn schema_catalog() -> Vec<SchemaDocument> {
     let envelope_schema = object_schema(vec![
         ("action", string_schema()),
@@ -710,6 +841,13 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             ndjson_event_schema: ndjson_event_schema.clone(),
         },
         SchemaDocument {
+            data_schema: lifecycle_data_schema(),
+            description: "Ensure result for an agent",
+            envelope_schema: envelope_schema.clone(),
+            name: "ensure",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
             data_schema: object_schema(vec![
                 ("agent", object_schema(Vec::new())),
                 ("inspection", object_schema(Vec::new())),
@@ -728,6 +866,13 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             description: "Structured inspection result for an agent",
             envelope_schema: envelope_schema.clone(),
             name: "inspect",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
+            data_schema: lifecycle_data_schema(),
+            description: "Install result for an agent",
+            envelope_schema: envelope_schema.clone(),
+            name: "install",
             ndjson_event_schema: ndjson_event_schema.clone(),
         },
         SchemaDocument {
@@ -750,11 +895,27 @@ fn schema_catalog() -> Vec<SchemaDocument> {
         SchemaDocument {
             data_schema: object_schema(vec![("commands", array_schema(object_schema(Vec::new())))]),
             description: "Structured schema catalog",
-            envelope_schema,
+            envelope_schema: envelope_schema.clone(),
             name: "schema",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
+            data_schema: lifecycle_data_schema(),
+            description: "Uninstall result for an agent",
+            envelope_schema,
+            name: "uninstall",
             ndjson_event_schema,
         },
     ]
+}
+
+fn lifecycle_data_schema() -> JsonSchema {
+    object_schema(vec![
+        ("agent", object_schema(Vec::new())),
+        ("changed", boolean_schema()),
+        ("installState", object_schema(Vec::new())),
+        ("installed", boolean_schema()),
+    ])
 }
 
 fn agent_info(agent: AgentDefinition) -> AgentInfo {

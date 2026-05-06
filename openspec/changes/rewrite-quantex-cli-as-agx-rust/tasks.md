@@ -37,9 +37,9 @@
 
 ## 5. Lifecycle Commands
 
-- [ ] Implement `install`.
-- [ ] Implement `ensure`.
-- [ ] Implement `uninstall`.
+- [x] Implement `install`.
+- [x] Implement `ensure`.
+- [x] Implement `uninstall`.
 - [ ] Implement `update <agent>`.
 - [ ] Implement `update --all` grouped by recorded install source.
 - [ ] Implement `exec` with install policy, preflight guidance, dry-run, timeout, and cancellation.

@@ -7,6 +7,7 @@ mod errors;
 mod inspection;
 mod lock;
 mod output;
+mod package_manager;
 mod state;
 
 use std::process::ExitCode;

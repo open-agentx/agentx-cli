@@ -145,6 +145,18 @@ pub enum Command {
         agent: String,
     },
 
+    #[command(alias = "i", about = "Install an agent")]
+    Install {
+        #[arg(help = "Agent name or alias")]
+        agent: String,
+    },
+
+    #[command(about = "Ensure an agent is installed")]
+    Ensure {
+        #[arg(help = "Agent name or alias")]
+        agent: String,
+    },
+
     #[command(about = "Return structured agent state")]
     Inspect {
         #[arg(help = "Agent name or alias")]
@@ -165,5 +177,11 @@ pub enum Command {
         key: Option<String>,
         #[arg(help = "Config value")]
         value: Option<String>,
+    },
+
+    #[command(alias = "rm", about = "Uninstall an agent")]
+    Uninstall {
+        #[arg(help = "Agent name or alias")]
+        agent: String,
     },
 }
