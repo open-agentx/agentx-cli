@@ -25,10 +25,13 @@
 
 ## 4. Agent Catalog and Inspection
 
-- [ ] Migrate all supported agent definitions.
-- [ ] Implement canonical name and alias lookup.
+- [x] Add read-only catalog fields for all supported agents.
+- [x] Implement `list` and `info` read-only catalog surfaces.
+- [x] Implement canonical name and alias lookup.
+- [ ] Migrate all supported install methods, self-update commands, and version probes.
 - [ ] Implement platform install method ordering.
-- [ ] Implement PATH detection and executable resolution.
+- [x] Implement basic PATH detection.
+- [ ] Implement executable resolution.
 - [ ] Implement installed and latest version probing with cache freshness metadata.
 
 ## 5. Lifecycle Commands

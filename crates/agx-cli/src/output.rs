@@ -15,6 +15,13 @@ pub struct CommandTarget {
 }
 
 impl CommandTarget {
+    pub fn agent(name: impl Into<String>) -> Self {
+        Self {
+            kind: TargetKind::Agent,
+            name: Some(name.into()),
+        }
+    }
+
     pub fn system(name: impl Into<String>) -> Self {
         Self {
             kind: TargetKind::System,

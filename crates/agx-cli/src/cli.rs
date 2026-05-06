@@ -135,4 +135,13 @@ pub enum Command {
         #[arg(help = "Optional command name")]
         command: Option<String>,
     },
+
+    #[command(alias = "ls", about = "List supported agents")]
+    List,
+
+    #[command(about = "Show agent details")]
+    Info {
+        #[arg(help = "Agent name or alias")]
+        agent: String,
+    },
 }

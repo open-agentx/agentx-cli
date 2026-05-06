@@ -1,5 +1,6 @@
 use serde::Serialize;
 
+use crate::agents::{self, AgentDefinition};
 use crate::cli::Command;
 use crate::context::CliContext;
 use crate::errors::{AgxError, AgxErrorCode};
@@ -9,6 +10,8 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
     match command {
         Command::Capabilities => capabilities_command(context),
         Command::Commands => commands_command(context),
+        Command::Info { agent } => info_command(agent, context),
+        Command::List => list_command(context),
         Command::Schema { command } => schema_command(command.as_deref(), context),
     }
 }
@@ -37,6 +40,52 @@ struct CapabilitiesData {
     installers: InstallerCapabilities,
     output_modes: Vec<&'static str>,
     platform: PlatformCapabilities,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ListData {
+    agents: Vec<ListedAgent>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ListedAgent {
+    binary_name: &'static str,
+    display_name: &'static str,
+    installed: bool,
+    lifecycle: &'static str,
+    name: &'static str,
+    source_label: &'static str,
+    update_label: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InfoData {
+    agent: AgentInfo,
+    inspection: AgentInspection,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentInfo {
+    aliases: Vec<&'static str>,
+    binary_name: &'static str,
+    display_name: &'static str,
+    homepage: &'static str,
+    name: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    package_name: Option<&'static str>,
+    self_update_commands: Vec<&'static str>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentInspection {
+    installed: bool,
+    lifecycle: &'static str,
+    source_label: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -168,6 +217,56 @@ fn capabilities_command(context: &CliContext) -> CommandResult {
     )
 }
 
+fn list_command(context: &CliContext) -> CommandResult {
+    CommandResult::success(
+        "list",
+        ListData {
+            agents: agents::all_agents()
+                .iter()
+                .map(|agent| ListedAgent {
+                    binary_name: agent.binary_name,
+                    display_name: agent.display_name,
+                    installed: is_command_available(agent.binary_name),
+                    lifecycle: "unmanaged",
+                    name: agent.name,
+                    source_label: "untracked",
+                    update_label: "manual",
+                })
+                .collect(),
+        },
+        CommandTarget::system("agents"),
+        context,
+    )
+}
+
+fn info_command(agent_name: &str, context: &CliContext) -> CommandResult {
+    let Some(agent) = agents::resolve_agent(agent_name) else {
+        return CommandResult::error(
+            "info",
+            AgxError::new(
+                AgxErrorCode::AgentNotFound,
+                format!("Unknown agent: {agent_name}"),
+            ),
+            CommandTarget::agent(agent_name),
+            context,
+        );
+    };
+
+    CommandResult::success(
+        "info",
+        InfoData {
+            agent: agent_info(agent),
+            inspection: AgentInspection {
+                installed: is_command_available(agent.binary_name),
+                lifecycle: "unmanaged",
+                source_label: "untracked",
+            },
+        },
+        CommandTarget::agent(agent.name),
+        context,
+    )
+}
+
 fn schema_command(command_name: Option<&str>, context: &CliContext) -> CommandResult {
     let mut commands = schema_catalog();
     if let Some(command_name) = command_name {
@@ -233,6 +332,38 @@ fn command_catalog() -> Vec<CommandDescriptor> {
                 "--quiet",
                 "--color",
                 "--log-level",
+                "--refresh",
+                "--no-cache",
+                "--timeout",
+            ],
+            name: "info",
+            output_schema_ref: "#/commands/info",
+            stability: "stable",
+            summary: "Show agent details",
+        },
+        CommandDescriptor {
+            flags: vec![
+                "--json",
+                "--output",
+                "--quiet",
+                "--color",
+                "--log-level",
+                "--refresh",
+                "--no-cache",
+                "--timeout",
+            ],
+            name: "list",
+            output_schema_ref: "#/commands/list",
+            stability: "stable",
+            summary: "List supported agents",
+        },
+        CommandDescriptor {
+            flags: vec![
+                "--json",
+                "--output",
+                "--quiet",
+                "--color",
+                "--log-level",
                 "--timeout",
             ],
             name: "schema",
@@ -244,34 +375,10 @@ fn command_catalog() -> Vec<CommandDescriptor> {
 }
 
 fn supported_agents() -> Vec<&'static str> {
-    vec![
-        "auggie",
-        "autohand",
-        "amp",
-        "claude",
-        "codebuddy",
-        "codex",
-        "copilot",
-        "crush",
-        "cursor",
-        "deepseek",
-        "devin",
-        "droid",
-        "forgecode",
-        "gemini",
-        "goose",
-        "jcode",
-        "junie",
-        "kilo",
-        "kimi",
-        "kiro",
-        "openhands",
-        "opencode",
-        "pi",
-        "qoder",
-        "qwen",
-        "vibe",
-    ]
+    agents::all_agents()
+        .iter()
+        .map(|agent| agent.name)
+        .collect()
 }
 
 fn installer_availability(command: &'static str) -> InstallerAvailability {
@@ -344,6 +451,23 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             ndjson_event_schema: ndjson_event_schema.clone(),
         },
         SchemaDocument {
+            data_schema: object_schema(vec![
+                ("agent", object_schema(Vec::new())),
+                ("inspection", object_schema(Vec::new())),
+            ]),
+            description: "Agent details",
+            envelope_schema: envelope_schema.clone(),
+            name: "info",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
+            data_schema: object_schema(vec![("agents", array_schema(object_schema(Vec::new())))]),
+            description: "Supported agent catalog",
+            envelope_schema: envelope_schema.clone(),
+            name: "list",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
             data_schema: object_schema(vec![("commands", array_schema(object_schema(Vec::new())))]),
             description: "Structured schema catalog",
             envelope_schema,
@@ -351,6 +475,18 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             ndjson_event_schema,
         },
     ]
+}
+
+fn agent_info(agent: AgentDefinition) -> AgentInfo {
+    AgentInfo {
+        aliases: agent.aliases.to_vec(),
+        binary_name: agent.binary_name,
+        display_name: agent.display_name,
+        homepage: agent.homepage,
+        name: agent.name,
+        package_name: agent.npm_package,
+        self_update_commands: Vec::new(),
+    }
 }
 
 fn object_schema(properties: Vec<(&'static str, JsonSchema)>) -> JsonSchema {

@@ -1,0 +1,233 @@
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentDefinition {
+    pub name: &'static str,
+    pub aliases: &'static [&'static str],
+    pub display_name: &'static str,
+    pub homepage: &'static str,
+    pub binary_name: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub npm_package: Option<&'static str>,
+}
+
+pub fn all_agents() -> &'static [AgentDefinition] {
+    &AGENTS
+}
+
+pub fn resolve_agent(input: &str) -> Option<AgentDefinition> {
+    AGENTS
+        .iter()
+        .copied()
+        .find(|agent| agent.name == input || agent.aliases.contains(&input))
+}
+
+const AGENTS: [AgentDefinition; 26] = [
+    AgentDefinition {
+        name: "auggie",
+        aliases: &[],
+        display_name: "Auggie CLI",
+        homepage: "https://docs.augmentcode.com/cli/overview",
+        binary_name: "auggie",
+        npm_package: Some("@augmentcode/auggie"),
+    },
+    AgentDefinition {
+        name: "autohand",
+        aliases: &["autohand-cli"],
+        display_name: "Autohand Code CLI",
+        homepage: "https://autohand.ai/cli/",
+        binary_name: "autohand",
+        npm_package: Some("autohand-cli"),
+    },
+    AgentDefinition {
+        name: "amp",
+        aliases: &[],
+        display_name: "Amp",
+        homepage: "https://ampcode.com/",
+        binary_name: "amp",
+        npm_package: Some("@sourcegraph/amp"),
+    },
+    AgentDefinition {
+        name: "claude",
+        aliases: &[],
+        display_name: "Claude Code",
+        homepage: "https://code.claude.com/docs",
+        binary_name: "claude",
+        npm_package: Some("@anthropic-ai/claude-code"),
+    },
+    AgentDefinition {
+        name: "codebuddy",
+        aliases: &["codebuddy-code"],
+        display_name: "CodeBuddy Code",
+        homepage: "https://www.codebuddy.cn/docs/cli/installation",
+        binary_name: "codebuddy",
+        npm_package: Some("@tencent-ai/codebuddy-code"),
+    },
+    AgentDefinition {
+        name: "codex",
+        aliases: &[],
+        display_name: "Codex CLI",
+        homepage: "https://developers.openai.com/codex/cli",
+        binary_name: "codex",
+        npm_package: Some("@openai/codex"),
+    },
+    AgentDefinition {
+        name: "copilot",
+        aliases: &[],
+        display_name: "GitHub Copilot CLI",
+        homepage: "https://github.com/features/copilot/cli",
+        binary_name: "copilot",
+        npm_package: Some("@github/copilot"),
+    },
+    AgentDefinition {
+        name: "crush",
+        aliases: &[],
+        display_name: "Crush",
+        homepage: "https://github.com/charmbracelet/crush",
+        binary_name: "crush",
+        npm_package: Some("@charmland/crush"),
+    },
+    AgentDefinition {
+        name: "cursor",
+        aliases: &["agent"],
+        display_name: "Cursor CLI",
+        homepage: "https://cursor.com/docs/cli",
+        binary_name: "agent",
+        npm_package: None,
+    },
+    AgentDefinition {
+        name: "deepseek",
+        aliases: &["deepseek-tui"],
+        display_name: "DeepSeek TUI",
+        homepage: "https://github.com/Hmbown/DeepSeek-TUI",
+        binary_name: "deepseek",
+        npm_package: Some("deepseek-tui"),
+    },
+    AgentDefinition {
+        name: "devin",
+        aliases: &[],
+        display_name: "Devin for Terminal",
+        homepage: "https://cli.devin.ai/",
+        binary_name: "devin",
+        npm_package: None,
+    },
+    AgentDefinition {
+        name: "droid",
+        aliases: &[],
+        display_name: "Droid",
+        homepage: "https://docs.factory.ai/cli/getting-started/overview",
+        binary_name: "droid",
+        npm_package: Some("droid"),
+    },
+    AgentDefinition {
+        name: "forgecode",
+        aliases: &["forge"],
+        display_name: "ForgeCode",
+        homepage: "https://forgecode.dev",
+        binary_name: "forge",
+        npm_package: Some("forgecode"),
+    },
+    AgentDefinition {
+        name: "gemini",
+        aliases: &[],
+        display_name: "Gemini CLI",
+        homepage: "https://google-gemini.github.io/gemini-cli/docs/",
+        binary_name: "gemini",
+        npm_package: Some("@google/gemini-cli"),
+    },
+    AgentDefinition {
+        name: "goose",
+        aliases: &[],
+        display_name: "Goose",
+        homepage: "https://github.com/aaif-goose/goose",
+        binary_name: "goose",
+        npm_package: None,
+    },
+    AgentDefinition {
+        name: "jcode",
+        aliases: &[],
+        display_name: "jcode CLI",
+        homepage: "https://github.com/1jehuang/jcode",
+        binary_name: "jcode",
+        npm_package: None,
+    },
+    AgentDefinition {
+        name: "junie",
+        aliases: &[],
+        display_name: "Junie CLI",
+        homepage: "https://junie.jetbrains.com/docs/junie-cli.html",
+        binary_name: "junie",
+        npm_package: Some("@jetbrains/junie"),
+    },
+    AgentDefinition {
+        name: "kilo",
+        aliases: &[],
+        display_name: "Kilo CLI",
+        homepage: "https://kilo.ai/docs/cli",
+        binary_name: "kilo",
+        npm_package: Some("@kilocode/cli"),
+    },
+    AgentDefinition {
+        name: "kimi",
+        aliases: &["kimi-code", "kimi-cli"],
+        display_name: "Kimi Code",
+        homepage: "https://moonshotai.github.io/kimi-cli/",
+        binary_name: "kimi",
+        npm_package: None,
+    },
+    AgentDefinition {
+        name: "kiro",
+        aliases: &["kiro-cli"],
+        display_name: "Kiro CLI",
+        homepage: "https://kiro.dev/cli/",
+        binary_name: "kiro-cli",
+        npm_package: None,
+    },
+    AgentDefinition {
+        name: "openhands",
+        aliases: &[],
+        display_name: "OpenHands CLI",
+        homepage: "https://docs.openhands.dev/openhands/usage/cli/installation",
+        binary_name: "openhands",
+        npm_package: None,
+    },
+    AgentDefinition {
+        name: "opencode",
+        aliases: &[],
+        display_name: "OpenCode",
+        homepage: "https://opencode.ai",
+        binary_name: "opencode",
+        npm_package: Some("opencode-ai"),
+    },
+    AgentDefinition {
+        name: "pi",
+        aliases: &[],
+        display_name: "Pi",
+        homepage: "https://pi.dev",
+        binary_name: "pi",
+        npm_package: Some("@mariozechner/pi-coding-agent"),
+    },
+    AgentDefinition {
+        name: "qoder",
+        aliases: &["qodercli"],
+        display_name: "Qoder CLI",
+        homepage: "https://docs.qoder.com/cli/quick-start",
+        binary_name: "qodercli",
+        npm_package: Some("@qoder-ai/qodercli"),
+    },
+    AgentDefinition {
+        name: "qwen",
+        aliases: &[],
+        display_name: "Qwen Code",
+        homepage: "https://qwenlm.github.io/qwen-code-docs/",
+        binary_name: "qwen",
+        npm_package: Some("@qwen-code/qwen-code"),
+    },
+    AgentDefinition {
+        name: "vibe",
+        aliases: &["mistral-vibe"],
+        display_name: "Mistral Vibe",
+        homepage: "https://docs.mistral.ai/mistral-vibe/terminal/install",
+        binary_name: "vibe",
+        npm_package: None,
+    },
+];
