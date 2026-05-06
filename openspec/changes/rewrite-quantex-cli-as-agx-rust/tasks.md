@@ -63,11 +63,11 @@
 
 ## 8. Package Distribution
 
-- [ ] Design npm main package and platform optional dependency packages.
-- [ ] Implement thin launcher for npm/Bun installation.
+- [x] Design npm main package and platform optional dependency packages.
+- [x] Implement thin launcher for npm/Bun installation.
 - [ ] Build platform binaries for release assets.
-- [ ] Generate manifest and SHA256 checksums.
-- [ ] Verify installed package launches native `agx`.
+- [x] Generate manifest and SHA256 checksums.
+- [x] Verify installed package launches native `agx`.
 
 ## 9. Documentation and Project Memory
 

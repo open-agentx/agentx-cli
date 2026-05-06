@@ -1,0 +1,9 @@
+{
+  "name": "@quantex/agx-linux-x64",
+  "version": "0.1.0",
+  "description": "AGX native binary for Linux x64",
+  "license": "MIT",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "files": ["bin"]
+}

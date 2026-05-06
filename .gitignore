@@ -130,6 +130,7 @@ dist
 
 # Rust
 target/
+release-artifacts/
 
 # yarn v3
 .pnp.*

@@ -1,0 +1,23 @@
+{
+  "name": "@quantex/agx",
+  "version": "0.1.0",
+  "description": "Rust-native AGX command launcher",
+  "license": "MIT",
+  "bin": {
+    "agx": "bin/agx.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "optionalDependencies": {
+    "@quantex/agx-darwin-arm64": "0.1.0",
+    "@quantex/agx-darwin-x64": "0.1.0",
+    "@quantex/agx-linux-arm64": "0.1.0",
+    "@quantex/agx-linux-x64": "0.1.0",
+    "@quantex/agx-win32-arm64": "0.1.0",
+    "@quantex/agx-win32-x64": "0.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
