@@ -5,7 +5,9 @@ mod config;
 mod context;
 mod errors;
 mod inspection;
+mod lock;
 mod output;
+mod state;
 
 use std::process::ExitCode;
 

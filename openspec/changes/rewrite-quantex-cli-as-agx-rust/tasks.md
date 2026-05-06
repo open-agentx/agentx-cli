@@ -48,9 +48,9 @@
 ## 6. Config, State, and Locks
 
 - [x] Implement config loading and normalization.
-- [ ] Implement state loading and mutation.
-- [ ] Preserve initial compatibility with `~/.quantex/config.json` and `~/.quantex/state.json`.
-- [ ] Implement lifecycle and self-upgrade resource locks.
+- [x] Implement state loading and mutation.
+- [x] Preserve initial compatibility with `~/.quantex/config.json` and `~/.quantex/state.json`.
+- [x] Implement lifecycle and self-upgrade resource locks.
 
 ## 7. Self Upgrade
 
