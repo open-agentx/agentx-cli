@@ -2,6 +2,7 @@
   "name": "agents-cli",
   "private": true,
   "description": "AGX Rust rewrite workspace and OpenSpec project memory",
+  "packageManager": "pnpm@10.18.3",
   "scripts": {
     "openspec:archive": "openspec archive --yes",
     "openspec:instructions": "openspec instructions --json",
