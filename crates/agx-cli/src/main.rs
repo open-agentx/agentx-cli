@@ -3,6 +3,7 @@ mod cli;
 mod commands;
 mod context;
 mod errors;
+mod inspection;
 mod output;
 
 use std::process::ExitCode;

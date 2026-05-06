@@ -4,6 +4,7 @@ use crate::agents::{self, AgentDefinition};
 use crate::cli::Command;
 use crate::context::CliContext;
 use crate::errors::{AgxError, AgxErrorCode};
+use crate::inspection;
 use crate::output::{CommandResult, CommandTarget};
 
 pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
@@ -11,7 +12,9 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
         Command::Capabilities => capabilities_command(context),
         Command::Commands => commands_command(context),
         Command::Info { agent } => info_command(agent, context),
+        Command::Inspect { agent } => inspect_command(agent, context),
         Command::List => list_command(context),
+        Command::Resolve { agent } => resolve_command(agent, context),
         Command::Schema { command } => schema_command(command.as_deref(), context),
     }
 }
@@ -64,7 +67,7 @@ struct ListedAgent {
 #[serde(rename_all = "camelCase")]
 struct InfoData {
     agent: AgentInfo,
-    inspection: AgentInspection,
+    inspection: inspection::AgentInspection,
 }
 
 #[derive(Debug, Serialize)]
@@ -82,10 +85,56 @@ struct AgentInfo {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct AgentInspection {
+struct InspectData {
+    agent: AgentInfo,
+    capabilities: AgentCapabilities,
+    inspection: inspection::AgentInspection,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentCapabilities {
+    install_methods: Vec<InstallMethodInfo>,
+    self_update_commands: Vec<&'static str>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ResolveData {
+    agent: AgentInfo,
+    resolution: Resolution,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Resolution {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    binary_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    install_guidance: Option<InstallGuidance>,
     installed: bool,
+    install_source: &'static str,
     lifecycle: &'static str,
     source_label: &'static str,
+    suggested_launch_command: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallGuidance {
+    docs_ref: &'static str,
+    install_methods: Vec<InstallMethodInfo>,
+    suggested_action: &'static str,
+    suggested_ensure_command: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallMethodInfo {
+    command: String,
+    label: &'static str,
+    #[serde(rename = "type")]
+    method_type: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -226,7 +275,7 @@ fn list_command(context: &CliContext) -> CommandResult {
                 .map(|agent| ListedAgent {
                     binary_name: agent.binary_name,
                     display_name: agent.display_name,
-                    installed: is_command_available(agent.binary_name),
+                    installed: inspection::find_binary_in_path(agent.binary_name).is_some(),
                     lifecycle: "unmanaged",
                     name: agent.name,
                     source_label: "untracked",
@@ -256,10 +305,64 @@ fn info_command(agent_name: &str, context: &CliContext) -> CommandResult {
         "info",
         InfoData {
             agent: agent_info(agent),
-            inspection: AgentInspection {
-                installed: is_command_available(agent.binary_name),
+            inspection: inspection::inspect_agent(agent),
+        },
+        CommandTarget::agent(agent.name),
+        context,
+    )
+}
+
+fn inspect_command(agent_name: &str, context: &CliContext) -> CommandResult {
+    let Some(agent) = agents::resolve_agent(agent_name) else {
+        return agent_not_found_result("inspect", agent_name, context);
+    };
+
+    CommandResult::success(
+        "inspect",
+        InspectData {
+            agent: agent_info(agent),
+            capabilities: AgentCapabilities {
+                install_methods: install_methods(agent),
+                self_update_commands: Vec::new(),
+            },
+            inspection: inspection::inspect_agent(agent),
+        },
+        CommandTarget::agent(agent.name),
+        context,
+    )
+}
+
+fn resolve_command(agent_name: &str, context: &CliContext) -> CommandResult {
+    let Some(agent) = agents::resolve_agent(agent_name) else {
+        return agent_not_found_result("resolve", agent_name, context);
+    };
+
+    let inspection = inspection::inspect_agent(agent);
+    let install_methods = install_methods(agent);
+    let installed = inspection.installed;
+    let install_guidance = if installed {
+        None
+    } else {
+        Some(InstallGuidance {
+            docs_ref: "openspec/changes/rewrite-quantex-cli-as-agx-rust/tasks.md",
+            install_methods,
+            suggested_action: "ensure-agent-installed",
+            suggested_ensure_command: format!("agx ensure {}", agent.name),
+        })
+    };
+
+    CommandResult::success(
+        "resolve",
+        ResolveData {
+            agent: agent_info(agent),
+            resolution: Resolution {
+                binary_path: inspection.binary_path,
+                install_guidance,
+                installed,
+                install_source: "untracked",
                 lifecycle: "unmanaged",
                 source_label: "untracked",
+                suggested_launch_command: vec![agent.binary_name.to_string()],
             },
         },
         CommandTarget::agent(agent.name),
@@ -292,6 +395,7 @@ fn schema_command(command_name: Option<&str>, context: &CliContext) -> CommandRe
     )
 }
 
+#[allow(clippy::too_many_lines)]
 fn command_catalog() -> Vec<CommandDescriptor> {
     vec![
         CommandDescriptor {
@@ -352,10 +456,42 @@ fn command_catalog() -> Vec<CommandDescriptor> {
                 "--no-cache",
                 "--timeout",
             ],
+            name: "inspect",
+            output_schema_ref: "#/commands/inspect",
+            stability: "stable",
+            summary: "Return structured agent state",
+        },
+        CommandDescriptor {
+            flags: vec![
+                "--json",
+                "--output",
+                "--quiet",
+                "--color",
+                "--log-level",
+                "--refresh",
+                "--no-cache",
+                "--timeout",
+            ],
             name: "list",
             output_schema_ref: "#/commands/list",
             stability: "stable",
             summary: "List supported agents",
+        },
+        CommandDescriptor {
+            flags: vec![
+                "--json",
+                "--output",
+                "--quiet",
+                "--color",
+                "--log-level",
+                "--refresh",
+                "--no-cache",
+                "--timeout",
+            ],
+            name: "resolve",
+            output_schema_ref: "#/commands/resolve",
+            stability: "stable",
+            summary: "Resolve an agent executable entrypoint",
         },
         CommandDescriptor {
             flags: vec![
@@ -461,10 +597,31 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             ndjson_event_schema: ndjson_event_schema.clone(),
         },
         SchemaDocument {
+            data_schema: object_schema(vec![
+                ("agent", object_schema(Vec::new())),
+                ("capabilities", object_schema(Vec::new())),
+                ("inspection", object_schema(Vec::new())),
+            ]),
+            description: "Structured inspection result for an agent",
+            envelope_schema: envelope_schema.clone(),
+            name: "inspect",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
             data_schema: object_schema(vec![("agents", array_schema(object_schema(Vec::new())))]),
             description: "Supported agent catalog",
             envelope_schema: envelope_schema.clone(),
             name: "list",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
+            data_schema: object_schema(vec![
+                ("agent", object_schema(Vec::new())),
+                ("resolution", object_schema(Vec::new())),
+            ]),
+            description: "Resolved executable entrypoint for an agent",
+            envelope_schema: envelope_schema.clone(),
+            name: "resolve",
             ndjson_event_schema: ndjson_event_schema.clone(),
         },
         SchemaDocument {
@@ -487,6 +644,39 @@ fn agent_info(agent: AgentDefinition) -> AgentInfo {
         package_name: agent.npm_package,
         self_update_commands: Vec::new(),
     }
+}
+
+fn install_methods(agent: AgentDefinition) -> Vec<InstallMethodInfo> {
+    agent.npm_package.map_or_else(Vec::new, |package| {
+        vec![
+            InstallMethodInfo {
+                command: format!("bun add -g {package}"),
+                label: "bun",
+                method_type: "bun",
+            },
+            InstallMethodInfo {
+                command: format!("npm install -g {package}"),
+                label: "npm",
+                method_type: "npm",
+            },
+        ]
+    })
+}
+
+fn agent_not_found_result(
+    action: &'static str,
+    agent_name: &str,
+    context: &CliContext,
+) -> CommandResult {
+    CommandResult::error(
+        action,
+        AgxError::new(
+            AgxErrorCode::AgentNotFound,
+            format!("Unknown agent: {agent_name}"),
+        ),
+        CommandTarget::agent(agent_name),
+        context,
+    )
 }
 
 fn object_schema(properties: Vec<(&'static str, JsonSchema)>) -> JsonSchema {

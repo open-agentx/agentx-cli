@@ -144,4 +144,16 @@ pub enum Command {
         #[arg(help = "Agent name or alias")]
         agent: String,
     },
+
+    #[command(about = "Return structured agent state")]
+    Inspect {
+        #[arg(help = "Agent name or alias")]
+        agent: String,
+    },
+
+    #[command(about = "Resolve an agent executable entrypoint")]
+    Resolve {
+        #[arg(help = "Agent name or alias")]
+        agent: String,
+    },
 }

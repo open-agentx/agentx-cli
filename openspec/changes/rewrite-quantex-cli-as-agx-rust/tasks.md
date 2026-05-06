@@ -31,8 +31,9 @@
 - [ ] Migrate all supported install methods, self-update commands, and version probes.
 - [ ] Implement platform install method ordering.
 - [x] Implement basic PATH detection.
-- [ ] Implement executable resolution.
-- [ ] Implement installed and latest version probing with cache freshness metadata.
+- [x] Implement executable resolution.
+- [x] Implement basic installed version probing.
+- [ ] Implement latest version probing with cache freshness metadata.
 
 ## 5. Lifecycle Commands
 
