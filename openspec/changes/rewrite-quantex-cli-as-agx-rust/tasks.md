@@ -4,8 +4,8 @@
 
 - [x] Initialize Rust workspace and crate ownership boundaries.
 - [x] Add `agx` binary entrypoint.
-- [ ] Add baseline Rust formatting, lint, test, and build validation.
-- [ ] Add CI workflow for Rust validation.
+- [x] Add baseline Rust formatting, lint, test, and build validation.
+- [x] Add CI workflow for Rust validation.
 
 ## 2. Compatibility Fixtures
 
