@@ -4,7 +4,7 @@
 
 Define the intended AGX command surface and compatibility expectations for the Rust rewrite.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: AGX MUST use agx as the canonical command
 

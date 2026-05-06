@@ -4,7 +4,7 @@
 
 Define the self-upgrade behavior expected from Rust-native AGX.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: AGX MUST inspect its install source
 

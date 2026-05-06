@@ -4,7 +4,7 @@
 
 Define the agent catalog compatibility expectations for the Rust-native AGX rewrite.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: AGX MUST preserve supported agent coverage
 

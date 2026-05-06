@@ -1,0 +1,16 @@
+{
+  "name": "agents-cli",
+  "private": true,
+  "description": "AGX Rust rewrite workspace and OpenSpec project memory",
+  "scripts": {
+    "openspec:archive": "openspec archive --yes",
+    "openspec:instructions": "openspec instructions --json",
+    "openspec:list": "openspec list",
+    "openspec:show": "openspec show --no-interactive",
+    "openspec:status": "openspec status --json",
+    "openspec:validate": "openspec validate --all --no-interactive"
+  },
+  "devDependencies": {
+    "@fission-ai/openspec": "1.3.1"
+  }
+}

@@ -4,7 +4,7 @@
 
 Define how Rust-native AGX is distributed through binaries, npm, and Bun.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: npm and Bun installs MUST launch Rust binaries
 
