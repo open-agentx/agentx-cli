@@ -1,0 +1,15 @@
+{
+  "action": "info",
+  "data": null,
+  "error": {
+    "code": "AGENT_NOT_FOUND",
+    "message": "Unknown agent: definitely-not-an-agent"
+  },
+  "exitCode": 3,
+  "ok": false,
+  "target": {
+    "kind": "agent",
+    "name": "definitely-not-an-agent"
+  },
+  "warnings": []
+}

@@ -1,0 +1,20 @@
+{
+  "source": "quantex-cli/src/commands/schema.ts",
+  "schemas": [
+    "capabilities",
+    "commands",
+    "config",
+    "doctor",
+    "exec",
+    "ensure",
+    "info",
+    "inspect",
+    "install",
+    "list",
+    "resolve",
+    "schema",
+    "uninstall",
+    "upgrade",
+    "update"
+  ]
+}

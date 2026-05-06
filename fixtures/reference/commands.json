@@ -1,0 +1,21 @@
+{
+  "source": "quantex-cli/src/commands/commands.ts",
+  "canonicalEntrypoint": "agx",
+  "commands": [
+    { "name": "capabilities", "outputSchemaRef": "#/commands/capabilities" },
+    { "name": "commands", "outputSchemaRef": "#/commands/commands" },
+    { "name": "config", "outputSchemaRef": "#/commands/config" },
+    { "name": "doctor", "outputSchemaRef": "#/commands/doctor" },
+    { "name": "exec", "outputSchemaRef": "#/commands/exec" },
+    { "name": "ensure", "outputSchemaRef": "#/commands/ensure" },
+    { "name": "info", "outputSchemaRef": "#/commands/info" },
+    { "name": "inspect", "outputSchemaRef": "#/commands/inspect" },
+    { "name": "install", "outputSchemaRef": "#/commands/install" },
+    { "name": "list", "outputSchemaRef": "#/commands/list" },
+    { "name": "resolve", "outputSchemaRef": "#/commands/resolve" },
+    { "name": "schema", "outputSchemaRef": "#/commands/schema" },
+    { "name": "update", "outputSchemaRef": "#/commands/update" },
+    { "name": "uninstall", "outputSchemaRef": "#/commands/uninstall" },
+    { "name": "upgrade", "outputSchemaRef": "#/commands/upgrade" }
+  ]
+}

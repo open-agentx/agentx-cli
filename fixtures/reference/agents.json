@@ -1,0 +1,31 @@
+{
+  "source": "quantex-cli/src/agents/definitions",
+  "agents": [
+    { "name": "amp", "aliases": [] },
+    { "name": "auggie", "aliases": [] },
+    { "name": "autohand", "aliases": ["autohand-cli"] },
+    { "name": "claude", "aliases": [] },
+    { "name": "codebuddy", "aliases": ["codebuddy-code"] },
+    { "name": "codex", "aliases": [] },
+    { "name": "copilot", "aliases": [] },
+    { "name": "crush", "aliases": [] },
+    { "name": "cursor", "aliases": ["agent"] },
+    { "name": "deepseek", "aliases": ["deepseek-tui"] },
+    { "name": "devin", "aliases": [] },
+    { "name": "droid", "aliases": [] },
+    { "name": "forgecode", "aliases": ["forge"] },
+    { "name": "gemini", "aliases": [] },
+    { "name": "goose", "aliases": [] },
+    { "name": "jcode", "aliases": [] },
+    { "name": "junie", "aliases": [] },
+    { "name": "kilo", "aliases": [] },
+    { "name": "kimi", "aliases": ["kimi-code", "kimi-cli"] },
+    { "name": "kiro", "aliases": ["kiro-cli"] },
+    { "name": "opencode", "aliases": [] },
+    { "name": "openhands", "aliases": [] },
+    { "name": "pi", "aliases": [] },
+    { "name": "qoder", "aliases": ["qodercli"] },
+    { "name": "qwen", "aliases": [] },
+    { "name": "vibe", "aliases": ["mistral-vibe"] }
+  ]
+}

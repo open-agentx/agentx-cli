@@ -9,11 +9,11 @@
 
 ## 2. Compatibility Fixtures
 
-- [ ] Capture reference command catalog fixtures from `quantex-cli`.
-- [ ] Capture reference schema fixtures from `quantex-cli`.
-- [ ] Capture reference agent catalog fixtures.
-- [ ] Capture representative error envelope and exit-code fixtures.
-- [ ] Define fixture update policy in docs or tests.
+- [x] Capture reference command catalog fixtures from `quantex-cli`.
+- [x] Capture reference schema fixtures from `quantex-cli`.
+- [x] Capture reference agent catalog fixtures.
+- [x] Capture representative error envelope and exit-code fixtures.
+- [x] Define fixture update policy in docs or tests.
 
 ## 3. CLI Surface
 
