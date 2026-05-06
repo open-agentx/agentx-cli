@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::agents::AgentDefinition;
@@ -54,13 +54,27 @@ pub fn find_binary_in_path(binary_name: &str) -> Option<PathBuf> {
 }
 
 fn get_installed_version(binary_path: &PathBuf) -> Option<String> {
-    let output = Command::new(binary_path).arg("--version").output().ok()?;
+    let output = Command::new(binary_path)
+        .args(version_probe_args(binary_path))
+        .output()
+        .ok()?;
     if !output.status.success() {
         return None;
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     parse_version(&stdout)
+}
+
+fn version_probe_args(binary_path: &Path) -> &'static [&'static str] {
+    let binary_name = binary_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or_default();
+    match binary_name {
+        "amp" | "devin" => &["version"],
+        _ => &["--version"],
+    }
 }
 
 fn parse_version(stdout: &str) -> Option<String> {

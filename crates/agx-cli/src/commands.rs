@@ -623,7 +623,7 @@ fn inspect_command(agent_name: &str, context: &CliContext) -> CommandResult {
             agent: agent_info(agent),
             capabilities: AgentCapabilities {
                 install_methods: install_methods(agent),
-                self_update_commands: Vec::new(),
+                self_update_commands: self_update_commands(agent),
             },
             inspection: inspection::inspect_agent(agent),
         },
@@ -1210,7 +1210,7 @@ fn agent_info(agent: AgentDefinition) -> AgentInfo {
         homepage: agent.homepage,
         name: agent.name,
         package_name: agent.npm_package,
-        self_update_commands: Vec::new(),
+        self_update_commands: self_update_commands(agent),
     }
 }
 
@@ -1229,6 +1229,30 @@ fn install_methods(agent: AgentDefinition) -> Vec<InstallMethodInfo> {
             },
         ]
     })
+}
+
+fn self_update_commands(agent: AgentDefinition) -> Vec<&'static str> {
+    match agent.name {
+        "amp" => vec!["amp update"],
+        "auggie" => vec!["auggie upgrade"],
+        "claude" => vec!["claude update", "claude upgrade"],
+        "codebuddy" => vec!["codebuddy update"],
+        "codex" => vec!["codex --upgrade"],
+        "crush" => vec!["crush update"],
+        "cursor" => vec!["agent update"],
+        "deepseek" => vec!["deepseek update"],
+        "devin" => vec!["devin update"],
+        "droid" => vec!["droid update"],
+        "forgecode" => vec!["forge update"],
+        "goose" => vec!["goose update"],
+        "kilo" => vec!["kilo upgrade"],
+        "kimi" => vec!["uv tool upgrade kimi-cli --no-cache"],
+        "opencode" => vec!["opencode upgrade"],
+        "openhands" => vec!["uv tool upgrade openhands --python 3.12"],
+        "pi" => vec!["pi update"],
+        "qoder" => vec!["qodercli update"],
+        _ => Vec::new(),
+    }
 }
 
 fn agent_not_found_result(

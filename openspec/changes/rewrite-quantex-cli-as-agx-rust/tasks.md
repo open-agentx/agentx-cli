@@ -28,6 +28,7 @@
 - [x] Add read-only catalog fields for all supported agents.
 - [x] Implement `list` and `info` read-only catalog surfaces.
 - [x] Implement canonical name and alias lookup.
+- [x] Expose migrated self-update command metadata and non-default version probes.
 - [ ] Migrate all supported install methods, self-update commands, and version probes.
 - [ ] Implement platform install method ordering.
 - [x] Implement basic PATH detection.
