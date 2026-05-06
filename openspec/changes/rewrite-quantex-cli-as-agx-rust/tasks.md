@@ -2,8 +2,8 @@
 
 ## 1. Project Bootstrap
 
-- [ ] Initialize Rust workspace and crate ownership boundaries.
-- [ ] Add `agx` binary entrypoint.
+- [x] Initialize Rust workspace and crate ownership boundaries.
+- [x] Add `agx` binary entrypoint.
 - [ ] Add baseline Rust formatting, lint, test, and build validation.
 - [ ] Add CI workflow for Rust validation.
 
