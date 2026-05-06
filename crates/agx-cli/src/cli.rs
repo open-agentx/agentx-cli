@@ -219,4 +219,7 @@ pub enum Command {
         #[arg(long, help = "Update all tracked installed agents")]
         all: bool,
     },
+
+    #[command(external_subcommand)]
+    External(Vec<String>),
 }

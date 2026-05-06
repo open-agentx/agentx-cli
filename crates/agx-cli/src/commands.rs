@@ -23,6 +23,7 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
             args,
             install_policy,
         } => exec_command(agent, args, *install_policy, context),
+        Command::External(args) => shortcut_exec_command(args, context),
         Command::Info { agent } => info_command(agent, context),
         Command::Install { agent } => install_command(agent, context),
         Command::Inspect { agent } => inspect_command(agent, context),
@@ -32,6 +33,33 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
         Command::Uninstall { agent } => uninstall_command(agent, context),
         Command::Update { agent, all } => update_command(agent.as_deref(), *all, context),
     }
+}
+
+fn shortcut_exec_command(args: &[String], context: &CliContext) -> CommandResult {
+    let Some((agent_name, agent_args)) = args.split_first() else {
+        return CommandResult::error(
+            "exec",
+            AgxError::new(
+                AgxErrorCode::InvalidArgument,
+                "Please specify an agent name",
+            ),
+            CommandTarget::agent(""),
+            context,
+        );
+    };
+
+    let agent_args = if agent_args.first().is_some_and(|arg| arg == "--") {
+        &agent_args[1..]
+    } else {
+        agent_args
+    };
+
+    exec_command(
+        agent_name,
+        agent_args,
+        crate::cli::InstallPolicyArg::IfMissing,
+        context,
+    )
 }
 
 #[derive(Debug, Serialize)]
