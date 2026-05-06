@@ -3,6 +3,7 @@ mod cli;
 mod commands;
 mod config;
 mod context;
+mod doctor;
 mod errors;
 mod exec;
 mod inspection;

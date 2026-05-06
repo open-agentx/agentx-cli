@@ -138,6 +138,9 @@ pub enum Command {
     #[command(about = "Return the stable command catalog")]
     Commands,
 
+    #[command(about = "Diagnose AGX installation and runtime health")]
+    Doctor,
+
     #[command(about = "Return structured output schemas")]
     Schema {
         #[arg(help = "Optional command name")]

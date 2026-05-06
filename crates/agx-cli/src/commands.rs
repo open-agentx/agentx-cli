@@ -4,6 +4,7 @@ use crate::agents::{self, AgentDefinition};
 use crate::cli::Command;
 use crate::config;
 use crate::context::CliContext;
+use crate::doctor;
 use crate::errors::{AgxError, AgxErrorCode};
 use crate::exec;
 use crate::inspection;
@@ -17,6 +18,7 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
         Command::Config { action, key, value } => {
             config_command(action.as_deref(), key.as_deref(), value.as_deref(), context)
         }
+        Command::Doctor => doctor_command(context),
         Command::Ensure { agent } => ensure_command(agent, context),
         Command::Exec {
             agent,
@@ -33,6 +35,15 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
         Command::Uninstall { agent } => uninstall_command(agent, context),
         Command::Update { agent, all } => update_command(agent.as_deref(), *all, context),
     }
+}
+
+fn doctor_command(context: &CliContext) -> CommandResult {
+    CommandResult::success(
+        "doctor",
+        doctor::run_doctor(context),
+        CommandTarget::system("doctor"),
+        context,
+    )
 }
 
 fn shortcut_exec_command(args: &[String], context: &CliContext) -> CommandResult {
@@ -749,6 +760,20 @@ fn command_catalog() -> Vec<CommandDescriptor> {
             flags: vec![
                 "--json",
                 "--output",
+                "--quiet",
+                "--color",
+                "--log-level",
+                "--timeout",
+            ],
+            name: "doctor",
+            output_schema_ref: "#/commands/doctor",
+            stability: "stable",
+            summary: "Diagnose AGX installation and runtime health",
+        },
+        CommandDescriptor {
+            flags: vec![
+                "--json",
+                "--output",
                 "--yes",
                 "--quiet",
                 "--color",
@@ -999,6 +1024,19 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             description: "Configuration state or mutation result",
             envelope_schema: envelope_schema.clone(),
             name: "config",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
+            data_schema: object_schema(vec![
+                ("checks", array_schema(object_schema(Vec::new()))),
+                ("installSource", object_schema(Vec::new())),
+                ("ok", boolean_schema()),
+                ("paths", object_schema(Vec::new())),
+                ("summary", string_schema()),
+            ]),
+            description: "AGX runtime diagnostics",
+            envelope_schema: envelope_schema.clone(),
+            name: "doctor",
             ndjson_event_schema: ndjson_event_schema.clone(),
         },
         SchemaDocument {
