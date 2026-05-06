@@ -107,6 +107,25 @@ impl CommandResult {
         }
     }
 
+    pub fn success_with_exit_code(
+        action: impl Into<String>,
+        data: impl Serialize,
+        target: CommandTarget,
+        context: &CliContext,
+        exit_code: u8,
+    ) -> Self {
+        Self {
+            action: action.into(),
+            data: Some(serde_json::to_value(data).expect("command data must serialize")),
+            error: None,
+            exit_code: Some(exit_code),
+            meta: create_meta(context),
+            ok: true,
+            target: Some(target),
+            warnings: Vec::new(),
+        }
+    }
+
     pub fn error(
         action: impl Into<String>,
         error: AgxError,

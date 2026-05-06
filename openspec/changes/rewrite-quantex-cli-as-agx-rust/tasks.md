@@ -42,7 +42,7 @@
 - [x] Implement `uninstall`.
 - [x] Implement `update <agent>`.
 - [x] Implement `update --all` grouped by recorded install source.
-- [ ] Implement `exec` with install policy, preflight guidance, dry-run, timeout, and cancellation.
+- [x] Implement `exec` with install policy, preflight guidance, dry-run, timeout, and cancellation.
 - [ ] Implement shortcut agent execution through `agx <agent>`.
 
 ## 6. Config, State, and Locks

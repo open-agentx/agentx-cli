@@ -122,6 +122,14 @@ pub enum LogLevelArg {
     Debug,
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+#[value(rename_all = "kebab-case")]
+pub enum InstallPolicyArg {
+    Never,
+    IfMissing,
+    Always,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum Command {
     #[command(about = "Return environment and surface capabilities")]
@@ -155,6 +163,25 @@ pub enum Command {
     Ensure {
         #[arg(help = "Agent name or alias")]
         agent: String,
+    },
+
+    #[command(about = "Execute an agent command")]
+    Exec {
+        #[arg(help = "Agent name or alias")]
+        agent: String,
+        #[arg(
+            long,
+            value_enum,
+            default_value = "if-missing",
+            help = "Install policy before executing: never, if-missing, or always"
+        )]
+        install_policy: InstallPolicyArg,
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments passed to the agent after --"
+        )]
+        args: Vec<String>,
     },
 
     #[command(about = "Return structured agent state")]

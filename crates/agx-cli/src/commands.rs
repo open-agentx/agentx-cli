@@ -5,6 +5,7 @@ use crate::cli::Command;
 use crate::config;
 use crate::context::CliContext;
 use crate::errors::{AgxError, AgxErrorCode};
+use crate::exec;
 use crate::inspection;
 use crate::output::{CommandResult, CommandTarget};
 use crate::package_manager;
@@ -17,6 +18,11 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
             config_command(action.as_deref(), key.as_deref(), value.as_deref(), context)
         }
         Command::Ensure { agent } => ensure_command(agent, context),
+        Command::Exec {
+            agent,
+            args,
+            install_policy,
+        } => exec_command(agent, args, *install_policy, context),
         Command::Info { agent } => info_command(agent, context),
         Command::Install { agent } => install_command(agent, context),
         Command::Inspect { agent } => inspect_command(agent, context),
@@ -426,6 +432,33 @@ fn ensure_command(agent_name: &str, context: &CliContext) -> CommandResult {
     lifecycle_command("ensure", agent_name, context, package_manager::ensure_agent)
 }
 
+fn exec_command(
+    agent_name: &str,
+    args: &[String],
+    install_policy: crate::cli::InstallPolicyArg,
+    context: &CliContext,
+) -> CommandResult {
+    let Some(agent) = agents::resolve_agent(agent_name) else {
+        return agent_not_found_result("exec", agent_name, context);
+    };
+
+    match exec::execute_agent(agent, args, install_policy, context) {
+        Ok(result) => {
+            let exit_code = result.exit_code.unwrap_or(0);
+            CommandResult::success_with_exit_code(
+                "exec",
+                result,
+                CommandTarget::agent(agent.name),
+                context,
+                exit_code,
+            )
+        }
+        Err(error) => {
+            CommandResult::error("exec", error, CommandTarget::agent(agent.name), context)
+        }
+    }
+}
+
 fn uninstall_command(agent_name: &str, context: &CliContext) -> CommandResult {
     lifecycle_command(
         "uninstall",
@@ -703,6 +736,23 @@ fn command_catalog() -> Vec<CommandDescriptor> {
         },
         CommandDescriptor {
             flags: vec![
+                "--install-policy",
+                "--json",
+                "--output",
+                "--yes",
+                "--quiet",
+                "--color",
+                "--log-level",
+                "--dry-run",
+                "--timeout",
+            ],
+            name: "exec",
+            output_schema_ref: "#/commands/exec",
+            stability: "stable",
+            summary: "Execute an agent command",
+        },
+        CommandDescriptor {
+            flags: vec![
                 "--json",
                 "--output",
                 "--quiet",
@@ -928,6 +978,25 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             description: "Ensure result for an agent",
             envelope_schema: envelope_schema.clone(),
             name: "ensure",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
+            data_schema: object_schema(vec![
+                ("agent", object_schema(Vec::new())),
+                ("args", array_schema(string_schema())),
+                ("binaryPath", string_schema()),
+                ("command", array_schema(string_schema())),
+                ("dryRun", boolean_schema()),
+                ("exitCode", integer_schema()),
+                ("installPolicy", string_schema()),
+                ("installedAfter", boolean_schema()),
+                ("installedBefore", boolean_schema()),
+                ("stderr", string_schema()),
+                ("stdout", string_schema()),
+            ]),
+            description: "Agent execution result",
+            envelope_schema: envelope_schema.clone(),
+            name: "exec",
             ndjson_event_schema: ndjson_event_schema.clone(),
         },
         SchemaDocument {

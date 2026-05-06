@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod context;
 mod errors;
+mod exec;
 mod inspection;
 mod lock;
 mod output;
