@@ -10,6 +10,7 @@ mod inspection;
 mod lock;
 mod output;
 mod package_manager;
+mod self_upgrade;
 mod state;
 
 use std::process::ExitCode;

@@ -55,8 +55,8 @@
 ## 7. Self Upgrade
 
 - [x] Implement self install-source detection.
-- [ ] Implement npm-installed binary self-upgrade.
-- [ ] Implement Bun-installed binary self-upgrade.
+- [x] Implement npm-installed binary self-upgrade.
+- [x] Implement Bun-installed binary self-upgrade.
 - [ ] Implement standalone binary self-upgrade with checksum verification.
 - [ ] Implement Windows delayed binary replacement.
 - [x] Implement recovery hints and doctor integration.

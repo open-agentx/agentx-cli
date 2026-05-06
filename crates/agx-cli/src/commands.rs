@@ -10,6 +10,7 @@ use crate::exec;
 use crate::inspection;
 use crate::output::{CommandResult, CommandTarget};
 use crate::package_manager;
+use crate::self_upgrade;
 
 pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
     match command {
@@ -33,6 +34,7 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
         Command::Resolve { agent } => resolve_command(agent, context),
         Command::Schema { command } => schema_command(command.as_deref(), context),
         Command::Uninstall { agent } => uninstall_command(agent, context),
+        Command::Upgrade => upgrade_command(context),
         Command::Update { agent, all } => update_command(agent.as_deref(), *all, context),
     }
 }
@@ -507,6 +509,29 @@ fn uninstall_command(agent_name: &str, context: &CliContext) -> CommandResult {
     )
 }
 
+fn upgrade_command(context: &CliContext) -> CommandResult {
+    match self_upgrade::upgrade_self(context) {
+        Ok(result) => CommandResult::success(
+            "upgrade",
+            result,
+            CommandTarget {
+                kind: crate::output::TargetKind::SelfTarget,
+                name: Some("agx".to_string()),
+            },
+            context,
+        ),
+        Err(error) => CommandResult::error(
+            "upgrade",
+            error,
+            CommandTarget {
+                kind: crate::output::TargetKind::SelfTarget,
+                name: Some("agx".to_string()),
+            },
+            context,
+        ),
+    }
+}
+
 fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> CommandResult {
     if all {
         let results = package_manager::update_all_agents(context);
@@ -917,6 +942,22 @@ fn command_catalog() -> Vec<CommandDescriptor> {
         },
         CommandDescriptor {
             flags: vec![
+                "--json",
+                "--output",
+                "--yes",
+                "--quiet",
+                "--color",
+                "--log-level",
+                "--dry-run",
+                "--timeout",
+            ],
+            name: "upgrade",
+            output_schema_ref: "#/commands/upgrade",
+            stability: "stable",
+            summary: "Upgrade AGX through its detected install channel",
+        },
+        CommandDescriptor {
+            flags: vec![
                 "--all",
                 "--json",
                 "--output",
@@ -1122,6 +1163,21 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             description: "Uninstall result for an agent",
             envelope_schema: envelope_schema.clone(),
             name: "uninstall",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
+            data_schema: object_schema(vec![
+                ("command", array_schema(string_schema())),
+                ("dryRun", boolean_schema()),
+                ("installSource", string_schema()),
+                ("message", string_schema()),
+                ("packageName", string_schema()),
+                ("status", string_schema()),
+                ("verifiedVersion", string_schema()),
+            ]),
+            description: "AGX self-upgrade result",
+            envelope_schema: envelope_schema.clone(),
+            name: "upgrade",
             ndjson_event_schema: ndjson_event_schema.clone(),
         },
         SchemaDocument {

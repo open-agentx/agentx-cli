@@ -215,6 +215,9 @@ pub enum Command {
         agent: String,
     },
 
+    #[command(about = "Upgrade AGX through its detected install channel")]
+    Upgrade,
+
     #[command(alias = "u", about = "Update one or all agents")]
     Update {
         #[arg(help = "Agent name or alias")]
