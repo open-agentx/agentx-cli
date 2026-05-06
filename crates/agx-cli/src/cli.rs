@@ -156,4 +156,14 @@ pub enum Command {
         #[arg(help = "Agent name or alias")]
         agent: String,
     },
+
+    #[command(about = "Read and modify AGX configuration")]
+    Config {
+        #[arg(help = "Action: get, set, reset")]
+        action: Option<String>,
+        #[arg(help = "Config key")]
+        key: Option<String>,
+        #[arg(help = "Config value")]
+        value: Option<String>,
+    },
 }

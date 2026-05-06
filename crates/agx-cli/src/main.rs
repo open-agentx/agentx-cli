@@ -1,6 +1,7 @@
 mod agents;
 mod cli;
 mod commands;
+mod config;
 mod context;
 mod errors;
 mod inspection;

@@ -2,6 +2,7 @@ use serde::Serialize;
 
 use crate::agents::{self, AgentDefinition};
 use crate::cli::Command;
+use crate::config;
 use crate::context::CliContext;
 use crate::errors::{AgxError, AgxErrorCode};
 use crate::inspection;
@@ -11,6 +12,9 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
     match command {
         Command::Capabilities => capabilities_command(context),
         Command::Commands => commands_command(context),
+        Command::Config { action, key, value } => {
+            config_command(action.as_deref(), key.as_deref(), value.as_deref(), context)
+        }
         Command::Info { agent } => info_command(agent, context),
         Command::Inspect { agent } => inspect_command(agent, context),
         Command::List => list_command(context),
@@ -33,6 +37,18 @@ struct CommandDescriptor {
 #[serde(rename_all = "camelCase")]
 struct CommandsData {
     commands: Vec<CommandDescriptor>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigData {
+    action: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    config: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    value: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -266,6 +282,84 @@ fn capabilities_command(context: &CliContext) -> CommandResult {
     )
 }
 
+fn config_command(
+    action: Option<&str>,
+    key: Option<&str>,
+    value: Option<&str>,
+    context: &CliContext,
+) -> CommandResult {
+    match action {
+        None => CommandResult::success(
+            "config",
+            ConfigData {
+                action: "list",
+                config: Some(config::load_effective_config()),
+                key: None,
+                value: None,
+            },
+            CommandTarget::config(None),
+            context,
+        ),
+        Some("get") => {
+            let Some(key) = key else {
+                return invalid_config_argument("Please specify a key", None, context);
+            };
+            CommandResult::success(
+                "config",
+                ConfigData {
+                    action: "get",
+                    config: None,
+                    key: Some(key.to_string()),
+                    value: Some(config::get_config_value(key)),
+                },
+                CommandTarget::config(Some(key.to_string())),
+                context,
+            )
+        }
+        Some("set") => {
+            let (Some(key), Some(value)) = (key, value) else {
+                return invalid_config_argument("Please specify both key and value", None, context);
+            };
+            match config::set_config_value(key, value) {
+                Ok(stored) => CommandResult::success(
+                    "config",
+                    ConfigData {
+                        action: "set",
+                        config: None,
+                        key: Some(key.to_string()),
+                        value: Some(stored),
+                    },
+                    CommandTarget::config(Some(key.to_string())),
+                    context,
+                ),
+                Err(error) => CommandResult::error(
+                    "config",
+                    error,
+                    CommandTarget::config(Some(key.to_string())),
+                    context,
+                ),
+            }
+        }
+        Some("reset") => match config::reset_config() {
+            Ok(defaults) => CommandResult::success(
+                "config",
+                ConfigData {
+                    action: "reset",
+                    config: Some(defaults),
+                    key: None,
+                    value: None,
+                },
+                CommandTarget::config(None),
+                context,
+            ),
+            Err(error) => {
+                CommandResult::error("config", error, CommandTarget::config(None), context)
+            }
+        },
+        Some(other) => invalid_config_argument(format!("Unknown action: {other}"), None, context),
+    }
+}
+
 fn list_command(context: &CliContext) -> CommandResult {
     CommandResult::success(
         "list",
@@ -431,6 +525,23 @@ fn command_catalog() -> Vec<CommandDescriptor> {
         },
         CommandDescriptor {
             flags: vec![
+                "get",
+                "set",
+                "reset",
+                "--json",
+                "--output",
+                "--quiet",
+                "--color",
+                "--log-level",
+                "--timeout",
+            ],
+            name: "config",
+            output_schema_ref: "#/commands/config",
+            stability: "stable",
+            summary: "Read and modify AGX configuration",
+        },
+        CommandDescriptor {
+            flags: vec![
                 "--json",
                 "--output",
                 "--quiet",
@@ -588,6 +699,18 @@ fn schema_catalog() -> Vec<SchemaDocument> {
         },
         SchemaDocument {
             data_schema: object_schema(vec![
+                ("action", string_schema()),
+                ("config", object_schema(Vec::new())),
+                ("key", string_schema()),
+                ("value", object_schema(Vec::new())),
+            ]),
+            description: "Configuration state or mutation result",
+            envelope_schema: envelope_schema.clone(),
+            name: "config",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
+            data_schema: object_schema(vec![
                 ("agent", object_schema(Vec::new())),
                 ("inspection", object_schema(Vec::new())),
             ]),
@@ -675,6 +798,19 @@ fn agent_not_found_result(
             format!("Unknown agent: {agent_name}"),
         ),
         CommandTarget::agent(agent_name),
+        context,
+    )
+}
+
+fn invalid_config_argument(
+    message: impl Into<String>,
+    key: Option<String>,
+    context: &CliContext,
+) -> CommandResult {
+    CommandResult::error(
+        "config",
+        AgxError::new(AgxErrorCode::InvalidArgument, message),
+        CommandTarget::config(key),
         context,
     )
 }

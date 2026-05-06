@@ -22,6 +22,13 @@ impl CommandTarget {
         }
     }
 
+    pub fn config(name: Option<String>) -> Self {
+        Self {
+            kind: TargetKind::Config,
+            name,
+        }
+    }
+
     pub fn system(name: impl Into<String>) -> Self {
         Self {
             kind: TargetKind::System,
