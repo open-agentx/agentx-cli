@@ -75,8 +75,8 @@
 - [x] Add OpenSpec README and config.
 - [x] Add project-memory spec.
 - [x] Add task-start and worktree runbooks.
-- [ ] Add Rust workspace architecture ADR after crate boundaries settle.
-- [ ] Add release and package-distribution runbook.
+- [x] Add Rust workspace architecture ADR after crate boundaries settle.
+- [x] Add release and package-distribution runbook.
 
 ## 10. Validation and Closure
 
