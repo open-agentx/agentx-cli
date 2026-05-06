@@ -17,11 +17,11 @@
 
 ## 3. CLI Surface
 
-- [ ] Implement global context flags.
-- [ ] Implement `human`, `json`, and `ndjson` output modes.
-- [ ] Implement structured result and event envelopes.
-- [ ] Implement stable error codes and exit-code mapping.
-- [ ] Implement command catalog and schema catalog.
+- [x] Implement global context flags.
+- [x] Implement `human`, `json`, and `ndjson` output modes.
+- [x] Implement structured result and event envelopes.
+- [x] Implement stable error codes and exit-code mapping.
+- [x] Implement command catalog and schema catalog.
 
 ## 4. Agent Catalog and Inspection
 
