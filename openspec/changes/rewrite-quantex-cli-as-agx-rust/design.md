@@ -2,52 +2,33 @@
 
 ## Overview
 
-AGX will be implemented as a Rust workspace with a thin CLI crate and focused domain crates. The `quantex-cli` submodule remains the behavior reference for command coverage, structured output, lifecycle behavior, and release/process lessons.
+AGX uses `quantex-cli` as the behavior reference while replacing the runtime with Rust-native binaries. The rewrite prioritizes observable compatibility first: command coverage, structured output shape, config/state compatibility, lifecycle command planning, and release/upgrade semantics.
 
-## Workspace Shape
+## Runtime Architecture
 
-```text
-crates/
-  agx-cli/
-  agx-core/
-  agx-agent-catalog/
-  agx-inspection/
-  agx-lifecycle/
-  agx-package-manager/
-  agx-config-state/
-  agx-self-upgrade/
-  agx-release/
-  agx-devflow/
-```
+The repository is a Rust workspace with the product binary in `crates/agx-cli`.
 
-Initial implementation may use fewer crates, but ownership boundaries should follow this shape so later extraction is straightforward.
+Current module boundaries:
 
-## Command Surface
+- `cli.rs`: `clap` command and global flag parsing.
+- `commands.rs`: command dispatch, command catalog, schema catalog, and command result assembly.
+- `agents.rs`: static agent catalog and alias lookup.
+- `inspection.rs`: PATH lookup and installed version probing.
+- `package_manager.rs`: managed install, ensure, uninstall, and update behavior.
+- `exec.rs`: agent process execution, dry-run planning, install policy handling, and timeout behavior.
+- `config.rs` and `state.rs`: compatible `~/.quantex` config and state handling.
+- `lock.rs`: lifecycle/state/self-upgrade resource locks.
+- `doctor.rs`: runtime and install-source diagnostics.
+- `self_upgrade.rs`: channel-specific self-upgrade planning and execution.
+- `output.rs`: JSON, NDJSON, and human output rendering.
 
-The only canonical binary is `agx`.
+Additional crates may be extracted later only when module boundaries stabilize and a separate OpenSpec change justifies the split.
 
-The Rust CLI should use `clap` and expose:
+## Command and Output Contracts
 
-- `agx capabilities`
-- `agx commands`
-- `agx schema [command]`
-- `agx inspect <agent>`
-- `agx resolve <agent>`
-- `agx install <agent>`
-- `agx ensure <agent>`
-- `agx exec <agent> --install <policy> -- [args...]`
-- `agx update [agent] --all`
-- `agx uninstall <agent>`
-- `agx list`
-- `agx info <agent>`
-- `agx config [get|set|reset] [key] [value]`
-- `agx upgrade [--check] [--channel stable|beta]`
-- `agx doctor`
-- `agx <agent> [args...]`
+`agx` is the only canonical binary. Legacy names from the reference implementation are not exposed by default.
 
-## Structured Output
-
-AGX should keep a stable output envelope with:
+Machine-readable command results keep the envelope fields:
 
 - `action`
 - `data`
@@ -58,64 +39,44 @@ AGX should keep a stable output envelope with:
 - `target`
 - `warnings`
 
-`stdout` remains reserved for structured output in JSON/NDJSON modes. Human logs and underlying installer output should avoid corrupting machine-readable output.
+JSON and NDJSON modes must avoid machine-specific instability in contracts. Fixtures should omit or normalize dynamic fields such as timestamps, run ids, absolute paths, and PATH-dependent availability.
 
-## Package Distribution
+## Packaging and Release
 
-npm and Bun installation should install or launch Rust binaries.
+npm and Bun package paths are installation and launch channels for native binaries, not product runtime implementations.
 
-Preferred distribution model:
+Distribution shape:
 
-- main npm package exposes `bin/agx` as a thin launcher
-- platform-specific packages carry native binaries through optional dependencies
-- Bun can consume the same npm package shape
-- standalone GitHub Release assets remain canonical zero-runtime binaries
+- main package exposes the `agx` executable through a thin launcher,
+- platform packages carry native binaries as optional dependencies,
+- standalone release artifacts remain zero-runtime binaries,
+- release metadata includes a manifest and SHA256 checksum files,
+- CI verifies the package launcher can start the native binary.
 
-Self-upgrade must distinguish:
+## Migration Compatibility
 
-- npm-installed Rust binary
-- Bun-installed Rust binary
-- standalone binary
-- source build
-- unknown
-
-## State and Config
-
-To preserve migration safety, initial AGX should read and write the same user-visible configuration and state paths used by the reference implementation:
+AGX reads and writes the reference user-visible files during the migration:
 
 - `~/.quantex/config.json`
 - `~/.quantex/state.json`
 
-A future OpenSpec change may rename these paths after a compatibility and migration plan exists.
+Renaming these paths or changing state compatibility requires a future OpenSpec change with a migration plan.
 
-## Testing Strategy
+## Validation Strategy
 
-Use golden tests captured from the reference implementation for:
-
-- command catalog
-- schema catalog
-- capabilities shape
-- error envelopes and exit codes
-- agent catalog snapshots
-- dry-run lifecycle behavior
-
-Use isolated temporary homes for config and state tests.
-
-Use integration tests for process spawning, timeout, cancellation, and installer command planning.
-
-## Validation
-
-Required Rust validation:
+Required local and CI validation:
 
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo build --workspace --release
+pnpm run openspec:validate
 ```
 
-OpenSpec validation:
+Release-package validation additionally runs:
 
 ```bash
-openspec validate --all --no-interactive
+pnpm run dist:local
+pnpm run package:verify
 ```

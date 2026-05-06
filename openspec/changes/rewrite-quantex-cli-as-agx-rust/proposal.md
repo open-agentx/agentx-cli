@@ -2,42 +2,46 @@
 
 ## Why
 
-The project needs a Rust-native implementation that fully preserves the lifecycle capabilities of `quantex-cli` while establishing `agx` as the single canonical command-line entrypoint.
+Implementation requested work-intake classification: this change replaces the product runtime, command surface, packaging, release workflow, and agent lifecycle behavior, so it requires OpenSpec before and during implementation.
 
-The current `quantex-cli` reference is a TypeScript/Bun implementation. AGX should use Rust for product runtime code, distribute native binaries, and treat npm and Bun as installation and self-upgrade channels rather than runtime requirements.
+The reference `quantex-cli` is a TypeScript/Bun lifecycle CLI for AI coding agents. AGX needs the same observable lifecycle coverage while using Rust-native binaries, `agx` as the canonical command, and npm/Bun only as distribution and self-upgrade channels.
 
 ## What Changes
 
-- Implement AGX as a Rust workspace with native binaries.
-- Replace user-facing `qtx` and `quantex` command paths with `agx`.
-- Preserve the observable lifecycle functions from `quantex-cli`: install, ensure, inspect, resolve, update, uninstall, list, info, exec, shortcut execution, capabilities, commands, schema, config, doctor, and upgrade.
-- Preserve agent-friendly contracts such as `--json`, `--output ndjson`, `--non-interactive`, `--yes`, `--quiet`, `--dry-run`, `--refresh`, `--no-cache`, `--run-id`, `--idempotency-key`, and `--timeout`.
-- Preserve compatible config and state semantics under `~/.quantex/` unless a later migration change intentionally renames them.
-- Distribute Rust binaries directly through GitHub Releases and through npm/Bun packages that launch or install the native binary.
-- Keep the legacy `quantex-cli` submodule as the behavior reference during migration.
+- Build AGX as a Rust workspace with the `agx` binary.
+- Preserve the reference lifecycle surface under `agx`: discovery, catalog, config, install, ensure, update, uninstall, execution, doctor, and self-upgrade.
+- Preserve agent-friendly structured output modes and stable error/exit-code behavior.
+- Preserve migration compatibility with `~/.quantex/config.json` and `~/.quantex/state.json`.
+- Replace JavaScript-runtime packaging with native binary distribution and thin npm/Bun launchers.
+- Establish Rust/pnpm GitHub Actions for validation, release verification, release artifacts, PR governance, and lifecycle smoke checks.
+- Keep `quantex-cli` as the read-only behavior reference during migration.
 
 ## Capabilities
 
-This change introduces or updates these capability areas:
+### New Capabilities
 
-- CLI surface
-- agent catalog
-- lifecycle execution
-- package distribution
-- self-upgrade
-- project memory and agent workflow
+- `cli-surface`: Canonical `agx` command surface and structured output contracts.
+- `agent-catalog`: Supported agent metadata, lookup, inspection, and version probing.
+- `lifecycle-commands`: Install, ensure, update, uninstall, execution, and shortcut execution behavior.
+- `config-surface`: Compatible config/state behavior for the migration period.
+- `self-upgrade`: Install-source detection and channel-specific self-upgrade behavior.
+- `package-distribution`: Native binary, npm/Bun launcher, release manifest, and checksum distribution.
+- `development-workflow`: OpenSpec-led development, validation, and GitHub Actions workflow expectations.
+
+### Modified Capabilities
+
+- `project-memory`: AGX adopts the Quantex OpenSpec-led workflow with Rust/pnpm validation and AGX-specific runbooks.
 
 ## Impact
 
-- Product implementation moves to Rust.
-- npm/Bun packaging changes from JavaScript runtime delivery to native binary delivery.
-- Tests need golden fixtures comparing AGX behavior against the reference implementation.
-- Release automation must build, verify, checksum, and publish platform binaries.
-- Agent workflow must use OpenSpec before implementation and report closure state explicitly.
+- Affected code: `crates/agx-cli`, package launcher files under `packages/`, release scripts, GitHub Actions, fixtures, and project-memory docs.
+- Affected specs: CLI surface, agent catalog, lifecycle commands, config surface, self-upgrade, package distribution, development workflow, and project memory.
+- Tests and fixtures must distinguish stable compatibility fields from environment-specific values such as timestamps, run ids, absolute paths, and installed tool availability.
+- Release automation must build native binaries, verify launch behavior, and publish checksummed artifacts.
 
 ## Non-goals
 
+- Do not expose `qtx` or `quantex` as canonical user-facing entrypoints.
+- Do not require Node.js, Bun, or npm when AGX is installed as a standalone native binary.
 - Do not turn AGX into a workflow orchestration platform.
-- Do not keep `qtx` or `quantex` as default user-facing commands.
-- Do not require Node.js, Bun, or npm at AGX runtime when a native binary is installed.
-- Do not modify the `quantex-cli` reference implementation as part of the Rust rewrite unless separately requested.
+- Do not modify the `quantex-cli` submodule as part of this rewrite.

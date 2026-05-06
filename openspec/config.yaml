@@ -8,21 +8,22 @@ context: |
   Non-goal: do not turn AGX into a workflow orchestration platform.
   Runtime target: Rust native binaries. npm and Bun are installation/self-upgrade channels for Rust binaries, not JavaScript runtime requirements.
   Agent runtime: Superpowers is preferred when available; skills/agx-agent-runtime/SKILL.md carries AGX-specific intake, validation, artifact-routing, and closure rules.
-  Project memory: OpenSpec owns non-trivial behavior or durable-process changes; ADRs record durable decisions; runbooks record repeatable operations; sessions record discussion summaries.
-  Work intake gate: before implementation or file edits, classify whether the work requires OpenSpec.
-  Delivery closure gate: before reporting completion, check validation, OpenSpec status, git status, commit, push, PR, release, and archive closure as applicable.
+  Project memory: OpenSpec owns non-trivial behavior or durable-process changes; GitHub issues track executable work when available; ADRs record durable decisions; runbooks record repeatable operations; sessions record discussion summaries.
+  Work intake gate: before implementation or file edits, classify whether the work requires OpenSpec. OpenSpec is required for observable CLI behavior, structured output/schema, agent catalog metadata, configuration/state, release/upgrade, architecture-boundary, durable-process, and product-facing documentation changes. Execution-oriented, continuation, or closure intent does not skip this gate.
+  Delivery closure gate: before reporting work as complete, check validation, OpenSpec status, git status, commit, push, PR, merge, release, and archive closure as applicable. Distinguish local implementation from PR delivery, merge delivery, OpenSpec archive closure, and release closure. Archive closure is agent-driven rather than bot-driven.
 
 rules:
   proposal:
-    - 'Use the proposal structure: Why, What Changes, Capabilities, Impact.'
+    - 'Use the OPSX proposal structure: Why, What Changes, Capabilities, Impact.'
     - Keep scope and non-goals explicit.
+    - Identify whether the change should create or modify OpenSpec capabilities.
     - State the work-intake classification when the change is created because implementation was requested.
   specs:
     - Requirements must use SHALL or MUST.
     - Scenarios should use Given/When/Then bullets.
     - Keep implementation details out unless they are externally observable behavior.
   design:
-    - Include a design document for architecture, migration, release, package distribution, dependency, or security-sensitive changes.
+    - 'Include a design document for cross-cutting workflow, release, dependency, migration, architecture, or security-sensitive changes.'
     - Prefer upstream OpenSpec and GitHub-native workflows over repo-local project-management scripts.
   tasks:
     - Include validation commands relevant to the change.

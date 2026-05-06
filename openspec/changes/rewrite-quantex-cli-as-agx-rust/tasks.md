@@ -1,90 +1,68 @@
 # Tasks
 
-## 1. Project Bootstrap
+## 1. OpenSpec
 
-- [x] Initialize Rust workspace and crate ownership boundaries.
-- [x] Add `agx` binary entrypoint.
-- [x] Add baseline Rust formatting, lint, test, and build validation.
-- [x] Add CI workflow for Rust validation.
-- [x] Expand GitHub Actions with CI matrix, PR governance, lifecycle smoke, and release verification workflows.
+- [x] 1.1 Define the Rust-native AGX rewrite proposal, design, and capability deltas.
+- [x] 1.2 Add canonical `agx` CLI surface requirements.
+- [x] 1.3 Add agent catalog and inspection requirements.
+- [x] 1.4 Add lifecycle command requirements.
+- [x] 1.5 Add compatible config/state requirements.
+- [x] 1.6 Add self-upgrade requirements.
+- [x] 1.7 Add package distribution requirements.
+- [x] 1.8 Add development workflow and GitHub Actions requirements.
 
-## 2. Compatibility Fixtures
+## 2. Rust CLI Implementation
 
-- [x] Capture reference command catalog fixtures from `quantex-cli`.
-- [x] Capture reference schema fixtures from `quantex-cli`.
-- [x] Capture reference agent catalog fixtures.
-- [x] Capture representative error envelope and exit-code fixtures.
-- [x] Define fixture update policy in docs or tests.
+- [x] 2.1 Initialize Rust workspace and `agx` binary entrypoint.
+- [x] 2.2 Implement global context flags and output modes.
+- [x] 2.3 Implement structured result envelopes, command catalog, schema catalog, and stable error codes.
+- [x] 2.4 Implement supported agent catalog, canonical lookup, aliases, basic PATH detection, executable resolution, and installed version probing.
+- [x] 2.5 Implement config loading, config mutation, state mutation, and compatible `~/.quantex` files.
+- [x] 2.6 Implement lifecycle locks and self-upgrade locks.
+- [x] 2.7 Implement `install`, `ensure`, `uninstall`, `update <agent>`, and `update --all`.
+- [x] 2.8 Implement `exec` and shortcut execution through `agx <agent>`.
+- [x] 2.9 Implement `doctor` diagnostics and install-source detection.
+- [x] 2.10 Implement npm and Bun managed self-upgrade paths.
+- [ ] 2.11 Complete standalone binary self-upgrade with checksum verification and Windows delayed replacement.
+- [ ] 2.12 Complete all install-method metadata, platform ordering, self-update metadata, and latest-version cache freshness.
 
-## 3. CLI Surface
+## 3. Packaging and Release
 
-- [x] Implement global context flags.
-- [x] Implement `human`, `json`, and `ndjson` output modes.
-- [x] Implement structured result and event envelopes.
-- [x] Implement stable error codes and exit-code mapping.
-- [x] Implement command catalog and schema catalog.
+- [x] 3.1 Design npm main package and platform optional dependency packages.
+- [x] 3.2 Implement thin npm/Bun launcher for native AGX binaries.
+- [x] 3.3 Generate release manifest and SHA256 checksum metadata.
+- [x] 3.4 Verify the package launcher starts native `agx`.
+- [ ] 3.5 Build full platform binary release assets.
 
-## 4. Agent Catalog and Inspection
+## 4. Fixtures and Documentation
 
-- [x] Add read-only catalog fields for all supported agents.
-- [x] Implement `list` and `info` read-only catalog surfaces.
-- [x] Implement canonical name and alias lookup.
-- [x] Expose migrated self-update command metadata and non-default version probes.
-- [ ] Migrate all supported install methods, self-update commands, and version probes.
-- [ ] Implement platform install method ordering.
-- [x] Implement basic PATH detection.
-- [x] Implement executable resolution.
-- [x] Implement basic installed version probing.
-- [ ] Implement latest version probing with cache freshness metadata.
+- [x] 4.1 Capture compatibility fixtures for command catalog, schema summary, agent catalog, and representative error envelope.
+- [x] 4.2 Define fixture update policy.
+- [x] 4.3 Add AGX agent workflow bootstrap, OpenSpec README/config, and project-memory spec.
+- [x] 4.4 Add task-start and worktree runbooks.
+- [x] 4.5 Add Rust workspace architecture ADR.
+- [x] 4.6 Add release and package-distribution runbook.
 
-## 5. Lifecycle Commands
+## 5. GitHub Actions
 
-- [x] Implement `install`.
-- [x] Implement `ensure`.
-- [x] Implement `uninstall`.
-- [x] Implement `update <agent>`.
-- [x] Implement `update --all` grouped by recorded install source.
-- [x] Implement `exec` with install policy, preflight guidance, dry-run, timeout, and cancellation.
-- [x] Implement shortcut agent execution through `agx <agent>`.
+- [x] 5.1 Add Rust and OpenSpec CI validation.
+- [x] 5.2 Expand CI to Linux, Windows, and macOS matrix validation.
+- [x] 5.3 Add PR governance workflow.
+- [x] 5.4 Add lifecycle smoke workflow.
+- [x] 5.5 Add release verification and release artifact workflows.
 
-## 6. Config, State, and Locks
+## 6. Validation
 
-- [x] Implement config loading and normalization.
-- [x] Implement state loading and mutation.
-- [x] Preserve initial compatibility with `~/.quantex/config.json` and `~/.quantex/state.json`.
-- [x] Implement lifecycle and self-upgrade resource locks.
+- [x] 6.1 Run `cargo fmt --all -- --check`.
+- [x] 6.2 Run `cargo clippy --workspace --all-targets -- -D warnings`.
+- [x] 6.3 Run `cargo test --workspace`.
+- [x] 6.4 Run `cargo build --workspace --release`.
+- [x] 6.5 Run `pnpm run openspec:validate`.
+- [x] 6.6 Run `pnpm run dist:local` and `pnpm run package:verify` for package-distribution slices.
 
-## 7. Self Upgrade
+## 7. Delivery
 
-- [x] Implement self install-source detection.
-- [x] Implement npm-installed binary self-upgrade.
-- [x] Implement Bun-installed binary self-upgrade.
-- [ ] Implement standalone binary self-upgrade with checksum verification.
-- [ ] Implement Windows delayed binary replacement.
-- [x] Implement recovery hints and doctor integration.
-
-## 8. Package Distribution
-
-- [x] Design npm main package and platform optional dependency packages.
-- [x] Implement thin launcher for npm/Bun installation.
-- [ ] Build platform binaries for release assets.
-- [x] Generate manifest and SHA256 checksums.
-- [x] Verify installed package launches native `agx`.
-
-## 9. Documentation and Project Memory
-
-- [x] Add AGX agent workflow bootstrap.
-- [x] Add OpenSpec README and config.
-- [x] Add project-memory spec.
-- [x] Add task-start and worktree runbooks.
-- [x] Add Rust workspace architecture ADR after crate boundaries settle.
-- [x] Add release and package-distribution runbook.
-
-## 10. Validation and Closure
-
-- [ ] Run Rust validation.
-- [ ] Run OpenSpec validation.
-- [ ] Confirm git status.
-- [ ] Deliver implementation PR when code begins.
-- [ ] Keep this OpenSpec change active until implementation merges and accepted specs are synced.
-- [ ] Archive this change only after implementation merge and spec sync.
+- [x] 7.1 Commit completed implementation slices with synchronized OpenSpec task updates.
+- [ ] 7.2 Push the branch and open an implementation PR.
+- [ ] 7.3 Keep this OpenSpec change active until implementation merges and accepted specs are synced.
+- [ ] 7.4 Archive this change only after implementation merge and spec sync.
