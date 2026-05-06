@@ -6,6 +6,7 @@
 - [x] Add `agx` binary entrypoint.
 - [x] Add baseline Rust formatting, lint, test, and build validation.
 - [x] Add CI workflow for Rust validation.
+- [x] Expand GitHub Actions with CI matrix, PR governance, lifecycle smoke, and release verification workflows.
 
 ## 2. Compatibility Fixtures
 

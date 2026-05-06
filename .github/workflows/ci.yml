@@ -1,15 +1,30 @@
 name: CI
 
 on:
-  pull_request:
   push:
     branches:
       - main
+      - beta
+  pull_request:
+    branches:
+      - main
+      - beta
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
+
+env:
+  CI: true
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
-  validate:
-    name: Validate
-    runs-on: windows-latest
+  lint:
+    name: Lint and Specs
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,17 +48,51 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check formatting
+      - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
-      - name: Lint
+      - name: Lint Rust
         run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Test
-        run: cargo test --workspace
-
-      - name: Build release
-        run: cargo build --workspace --release
 
       - name: Validate OpenSpec
         run: pnpm run openspec:validate
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test Rust workspace
+        run: cargo test --workspace
+
+      - name: Build release binary
+        run: cargo build --workspace --release
+
+      - name: Verify package launcher
+        run: pnpm run package:verify

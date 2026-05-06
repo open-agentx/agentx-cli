@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -42,6 +42,9 @@ const manifest = {
 };
 
 await mkdir(artifactDir, { recursive: true });
+await copyFile(binaryPath, join(artifactDir, assetName));
 await writeFile(join(artifactDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 await writeFile(join(artifactDir, "SHA256SUMS"), `${sha256}  ${assetName}\n`);
+await writeFile(join(artifactDir, `${assetName}.json`), `${JSON.stringify(manifest, null, 2)}\n`);
+await writeFile(join(artifactDir, `${assetName}.sha256`), `${sha256}  ${assetName}\n`);
 console.log(`Wrote release manifest for ${assetName}`);

@@ -1,0 +1,77 @@
+name: Lifecycle Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - beta
+    paths:
+      - '.github/workflows/sandbox-tests.yml'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'crates/**'
+      - 'packages/**'
+      - 'scripts/**'
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+  schedule:
+    - cron: '0 6 * * 2'
+
+env:
+  CI: true
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  lifecycle-smoke:
+    name: Lifecycle Smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build debug binary
+        run: cargo build --workspace
+
+      - name: Smoke discovery commands
+        shell: pwsh
+        run: |
+          ./target/debug/agx --version
+          ./target/debug/agx --json capabilities
+          ./target/debug/agx --json commands
+          ./target/debug/agx --json schema
+          ./target/debug/agx --json list
+          ./target/debug/agx --json info qoder
+
+      - name: Smoke lifecycle dry-runs
+        shell: pwsh
+        run: |
+          ./target/debug/agx --json --dry-run install qoder
+          ./target/debug/agx --json --dry-run update --all
+          ./target/debug/agx --json --dry-run exec qoder -- --version
