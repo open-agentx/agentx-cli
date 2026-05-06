@@ -40,8 +40,8 @@
 - [x] Implement `install`.
 - [x] Implement `ensure`.
 - [x] Implement `uninstall`.
-- [ ] Implement `update <agent>`.
-- [ ] Implement `update --all` grouped by recorded install source.
+- [x] Implement `update <agent>`.
+- [x] Implement `update --all` grouped by recorded install source.
 - [ ] Implement `exec` with install policy, preflight guidance, dry-run, timeout, and cancellation.
 - [ ] Implement shortcut agent execution through `agx <agent>`.
 

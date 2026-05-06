@@ -184,4 +184,12 @@ pub enum Command {
         #[arg(help = "Agent name or alias")]
         agent: String,
     },
+
+    #[command(alias = "u", about = "Update one or all agents")]
+    Update {
+        #[arg(help = "Agent name or alias")]
+        agent: Option<String>,
+        #[arg(long, help = "Update all tracked installed agents")]
+        all: bool,
+    },
 }

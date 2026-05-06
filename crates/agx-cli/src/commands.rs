@@ -24,6 +24,7 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
         Command::Resolve { agent } => resolve_command(agent, context),
         Command::Schema { command } => schema_command(command.as_deref(), context),
         Command::Uninstall { agent } => uninstall_command(agent, context),
+        Command::Update { agent, all } => update_command(agent.as_deref(), *all, context),
     }
 }
 
@@ -107,6 +108,13 @@ struct LifecycleData {
 struct LifecycleAgent {
     display_name: &'static str,
     name: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateData {
+    results: Vec<package_manager::UpdateResult>,
+    scope: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -425,6 +433,62 @@ fn uninstall_command(agent_name: &str, context: &CliContext) -> CommandResult {
         context,
         package_manager::uninstall_agent,
     )
+}
+
+fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> CommandResult {
+    if all {
+        let results = package_manager::update_all_agents(context);
+        let has_failures = results
+            .iter()
+            .any(|result| matches!(result.status, "failed" | "locked"));
+        let data = UpdateData {
+            results,
+            scope: "all",
+        };
+        if has_failures {
+            return CommandResult::error(
+                "update",
+                AgxError::new(
+                    AgxErrorCode::UpdateFailed,
+                    "One or more agents failed to update.",
+                ),
+                CommandTarget::agent("all"),
+                context,
+            );
+        }
+        return CommandResult::success("update", data, CommandTarget::agent("all"), context);
+    }
+
+    let Some(agent_name) = agent_name else {
+        return CommandResult::error(
+            "update",
+            AgxError::new(
+                AgxErrorCode::InvalidArgument,
+                "Please specify an agent name or use --all flag",
+            ),
+            CommandTarget::agent(""),
+            context,
+        );
+    };
+
+    let Some(agent) = agents::resolve_agent(agent_name) else {
+        return agent_not_found_result("update", agent_name, context);
+    };
+
+    match package_manager::update_agent(agent, context) {
+        Ok(result) => CommandResult::success(
+            "update",
+            UpdateData {
+                results: vec![result],
+                scope: "single",
+            },
+            CommandTarget::agent(agent.name),
+            context,
+        ),
+        Err(error) => {
+            CommandResult::error("update", error, CommandTarget::agent(agent.name), context)
+        }
+    }
 }
 
 fn info_command(agent_name: &str, context: &CliContext) -> CommandResult {
@@ -748,6 +812,25 @@ fn command_catalog() -> Vec<CommandDescriptor> {
             stability: "stable",
             summary: "Uninstall an agent",
         },
+        CommandDescriptor {
+            flags: vec![
+                "--all",
+                "--json",
+                "--output",
+                "--quiet",
+                "--color",
+                "--log-level",
+                "--dry-run",
+                "--refresh",
+                "--no-cache",
+                "--timeout",
+                "--idempotency-key",
+            ],
+            name: "update",
+            output_schema_ref: "#/commands/update",
+            stability: "stable",
+            summary: "Update one or all agents",
+        },
     ]
 }
 
@@ -902,8 +985,18 @@ fn schema_catalog() -> Vec<SchemaDocument> {
         SchemaDocument {
             data_schema: lifecycle_data_schema(),
             description: "Uninstall result for an agent",
-            envelope_schema,
+            envelope_schema: envelope_schema.clone(),
             name: "uninstall",
+            ndjson_event_schema: ndjson_event_schema.clone(),
+        },
+        SchemaDocument {
+            data_schema: object_schema(vec![
+                ("results", array_schema(object_schema(Vec::new()))),
+                ("scope", string_schema()),
+            ]),
+            description: "Update results for one or all agents",
+            envelope_schema,
+            name: "update",
             ndjson_event_schema,
         },
     ]

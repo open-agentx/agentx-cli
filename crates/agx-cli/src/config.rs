@@ -9,7 +9,7 @@ use crate::errors::{AgxError, AgxErrorCode};
 pub fn load_effective_config() -> BTreeMap<String, Value> {
     let mut config = default_config();
     if let Ok(raw) = fs::read_to_string(config_file_path())
-        && let Ok(Value::Object(stored)) = serde_json::from_str::<Value>(&raw)
+        && let Ok(Value::Object(stored)) = serde_json::from_str::<Value>(strip_json_bom(&raw))
     {
         for (key, value) in stored {
             if is_supported_key(&key) {
@@ -127,6 +127,10 @@ fn is_supported_key(key: &str) -> bool {
 
 fn invalid(message: impl Into<String>) -> AgxError {
     AgxError::new(AgxErrorCode::InvalidArgument, message)
+}
+
+fn strip_json_bom(raw: &str) -> &str {
+    raw.strip_prefix('\u{feff}').unwrap_or(raw)
 }
 
 fn config_file_path() -> PathBuf {

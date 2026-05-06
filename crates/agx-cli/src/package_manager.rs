@@ -18,6 +18,18 @@ pub struct LifecycleResult {
     pub message: Option<String>,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateResult {
+    pub display_name: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    pub status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<String>,
+}
+
 pub fn install_agent(
     agent: AgentDefinition,
     context: &CliContext,
@@ -53,7 +65,7 @@ pub fn install_agent(
         });
     }
 
-    run_external_command(&command)?;
+    run_external_command(&command, AgxErrorCode::InstallFailed)?;
     let installed_state = installed_state(agent, install_type, package);
     state::set_installed_agent_state(installed_state.clone())?;
     Ok(LifecycleResult {
@@ -112,13 +124,99 @@ pub fn uninstall_agent(
         });
     }
 
-    run_external_command(&command)?;
+    run_external_command(&command, AgxErrorCode::UninstallFailed)?;
     state::remove_installed_agent_state(agent.name)?;
     Ok(LifecycleResult {
         changed: true,
         install_state: None,
         installed: false,
         message: None,
+    })
+}
+
+pub fn update_agent(
+    agent: AgentDefinition,
+    context: &CliContext,
+) -> Result<UpdateResult, AgxError> {
+    let Some(installed_state) = state::get_installed_agent_state(agent.name) else {
+        return Err(AgxError::new(
+            AgxErrorCode::AgentNotInstalled,
+            format!("{} is not tracked as installed by AGX.", agent.display_name),
+        ));
+    };
+
+    update_tracked_agent(agent, &installed_state, context)
+}
+
+pub fn update_all_agents(context: &CliContext) -> Vec<UpdateResult> {
+    let mut installed_agents: Vec<_> = state::load_state().installed_agents.into_values().collect();
+    installed_agents.sort_by(|left, right| {
+        left.install_type
+            .cmp(&right.install_type)
+            .then_with(|| left.agent_name.cmp(&right.agent_name))
+    });
+
+    installed_agents
+        .iter()
+        .map(|installed_state| {
+            let Some(agent) = crate::agents::resolve_agent(&installed_state.agent_name) else {
+                return UpdateResult {
+                    display_name: installed_state.agent_name.clone(),
+                    name: installed_state.agent_name.clone(),
+                    message: Some("Tracked agent is no longer in the AGX catalog.".to_string()),
+                    status: "manual-required",
+                    strategy: None,
+                };
+            };
+
+            update_tracked_agent(agent, installed_state, context).unwrap_or_else(|error| {
+                UpdateResult {
+                    display_name: agent.display_name.to_string(),
+                    name: agent.name.to_string(),
+                    message: Some(error.message),
+                    status: "failed",
+                    strategy: Some(format!("managed/{}", installed_state.install_type)),
+                }
+            })
+        })
+        .collect()
+}
+
+fn update_tracked_agent(
+    agent: AgentDefinition,
+    installed_state: &InstalledAgentState,
+    context: &CliContext,
+) -> Result<UpdateResult, AgxError> {
+    let Some(package_name) = installed_state.package_name.as_deref() else {
+        return Ok(UpdateResult {
+            display_name: agent.display_name.to_string(),
+            name: agent.name.to_string(),
+            message: Some("No managed package is recorded for this agent.".to_string()),
+            status: "manual-required",
+            strategy: None,
+        });
+    };
+
+    let command = install_command(&installed_state.install_type, package_name);
+    let strategy = Some(format!("managed/{}", installed_state.install_type));
+
+    if context.dry_run {
+        return Ok(UpdateResult {
+            display_name: agent.display_name.to_string(),
+            name: agent.name.to_string(),
+            message: Some(format!("Dry run: would run `{}`.", command.join(" "))),
+            status: "planned",
+            strategy,
+        });
+    }
+
+    run_external_command(&command, AgxErrorCode::UpdateFailed)?;
+    Ok(UpdateResult {
+        display_name: agent.display_name.to_string(),
+        name: agent.name.to_string(),
+        message: None,
+        status: "updated",
+        strategy,
     })
 }
 
@@ -181,7 +279,7 @@ fn installed_state(
     }
 }
 
-fn run_external_command(command: &[String]) -> Result<(), AgxError> {
+fn run_external_command(command: &[String], error_code: AgxErrorCode) -> Result<(), AgxError> {
     let Some((program, args)) = command.split_first() else {
         return Err(AgxError::new(
             AgxErrorCode::InvalidArgument,
@@ -191,7 +289,7 @@ fn run_external_command(command: &[String]) -> Result<(), AgxError> {
 
     let status = Command::new(program).args(args).status().map_err(|error| {
         AgxError::new(
-            AgxErrorCode::InstallFailed,
+            error_code,
             format!("Failed to run `{}`: {error}", command.join(" ")),
         )
     })?;
@@ -200,7 +298,7 @@ fn run_external_command(command: &[String]) -> Result<(), AgxError> {
         Ok(())
     } else {
         Err(AgxError::new(
-            AgxErrorCode::InstallFailed,
+            error_code,
             format!("Command `{}` exited with {status}.", command.join(" ")),
         ))
     }

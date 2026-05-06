@@ -95,7 +95,7 @@ fn read_state() -> Result<AgxState, AgxError> {
         )
     })?;
 
-    serde_json::from_str(&raw).map_err(|error| {
+    serde_json::from_str(strip_json_bom(&raw)).map_err(|error| {
         AgxError::new(
             AgxErrorCode::InvalidArgument,
             format!("Failed to parse state: {error}"),
@@ -135,6 +135,10 @@ pub fn state_file_path() -> PathBuf {
 
 fn config_dir() -> PathBuf {
     home_dir().join(".quantex")
+}
+
+fn strip_json_bom(raw: &str) -> &str {
+    raw.strip_prefix('\u{feff}').unwrap_or(raw)
 }
 
 fn home_dir() -> PathBuf {
