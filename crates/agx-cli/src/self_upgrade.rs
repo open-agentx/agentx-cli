@@ -25,6 +25,8 @@ pub struct UpgradeData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latest_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     pub package_name: &'static str,
     pub status: &'static str,
@@ -118,6 +120,7 @@ pub fn upgrade_self(
             dry_run: context.dry_run,
             install_source,
             latest_version: Some(latest_version),
+            recovery_hint: None,
             message: None,
             package_name: AGX_PACKAGE_NAME,
             status,
@@ -135,6 +138,7 @@ pub fn upgrade_self(
             dry_run: context.dry_run,
             install_source,
             latest_version: Some(latest_version.to_string()),
+            recovery_hint: None,
             message: Some(
                 if is_version_older(latest_version, env!("CARGO_PKG_VERSION")) {
                     format!(
@@ -210,6 +214,7 @@ fn upgrade_managed(
                 InstallSourceKind::Bun
             },
             latest_version,
+            recovery_hint: None,
             message: Some(format!(
                 "Dry run: would run managed self-upgrade through {program}."
             )),
@@ -219,7 +224,15 @@ fn upgrade_managed(
         });
     }
 
-    run_external_command(&command)?;
+    run_external_command(
+        &command,
+        if program == "npm" {
+            InstallSourceKind::Npm
+        } else {
+            InstallSourceKind::Bun
+        },
+        channel,
+    )?;
     let verified_version = verify_current_version();
     Ok(UpgradeData {
         channel: Some(channel),
@@ -232,6 +245,7 @@ fn upgrade_managed(
             InstallSourceKind::Bun
         },
         latest_version,
+        recovery_hint: None,
         message: None,
         package_name: AGX_PACKAGE_NAME,
         status: "upgraded",
@@ -291,7 +305,40 @@ fn detect_install_source(executable: &Path) -> InstallSourceKind {
     }
 }
 
-fn run_external_command(command: &[String]) -> Result<(), AgxError> {
+fn run_external_command(
+    command: &[String],
+    install_source: InstallSourceKind,
+    channel: SelfUpdateChannel,
+) -> Result<(), AgxError> {
+    if let Ok(mode) = std::env::var("AGX_TEST_UPGRADE_FAILURE") {
+        let message = match mode.as_str() {
+            "locked" => "Another agx upgrade is already running.",
+            "permission" => "Failed to replace the current AGX binary.",
+            "npm" => "Failed to update agxctl through npm.",
+            "bun" => "Failed to update agxctl through Bun.",
+            _ => "Failed to upgrade AGX.",
+        };
+        let recovery_hint = if mode == "locked" {
+            Some(
+                "another agx upgrade is already running; wait for it to finish and retry"
+                    .to_string(),
+            )
+        } else {
+            get_recovery_hint(install_source, channel)
+        };
+        return Err(AgxError::new(
+            if mode == "locked" {
+                AgxErrorCode::ResourceLocked
+            } else {
+                AgxErrorCode::UpgradeFailed
+            },
+            recovery_hint.map_or_else(
+                || message.to_string(),
+                |hint| format!("{message} Next step: {hint}"),
+            ),
+        ));
+    }
+
     let Some((program, args)) = command.split_first() else {
         return Err(AgxError::new(
             AgxErrorCode::InvalidArgument,

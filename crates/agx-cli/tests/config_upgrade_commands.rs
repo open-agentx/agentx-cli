@@ -298,3 +298,94 @@ fn upgrade_ndjson_emits_single_result_event() {
     assert_eq!(lines[0]["meta"]["mode"], "ndjson");
     assert_eq!(lines[0]["data"]["data"]["installSource"], "bun");
 }
+
+#[test]
+fn upgrade_failure_surfaces_bun_recovery_hint() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "bun"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "upgrade"],
+        &[
+            ("AGX_TEST_LATEST_VERSION", "0.2.0"),
+            ("AGX_TEST_UPGRADE_FAILURE", "bun"),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "UPGRADE_FAILED");
+    assert_eq!(json["data"]["status"], "failed");
+    assert_eq!(json["data"]["recoveryHint"], "bun add -g agxctl@latest");
+}
+
+#[test]
+fn upgrade_failure_surfaces_npm_recovery_hint() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "npm"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "upgrade"],
+        &[
+            ("AGX_TEST_LATEST_VERSION", "0.2.0"),
+            ("AGX_TEST_UPGRADE_FAILURE", "npm"),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "UPGRADE_FAILED");
+    assert_eq!(json["data"]["recoveryHint"], "npm install -g agxctl@latest");
+}
+
+#[test]
+fn upgrade_failure_surfaces_lock_retry_hint() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "npm"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "upgrade"],
+        &[
+            ("AGX_TEST_LATEST_VERSION", "0.2.0"),
+            ("AGX_TEST_UPGRADE_FAILURE", "locked"),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(9));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "RESOURCE_LOCKED");
+    assert_eq!(json["data"]["recoveryHint"], "npm install -g agxctl@latest");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("already running")
+    );
+}

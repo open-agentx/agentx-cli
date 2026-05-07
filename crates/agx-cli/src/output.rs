@@ -685,11 +685,24 @@ fn render_resolve(result: &CommandResult) {
 
 fn render_upgrade(result: &CommandResult) {
     if let Some(error) = &result.error {
-        println!("{}", error.message);
-        if let Some(data) = &result.data
-            && let Some(message) = data["message"].as_str()
-        {
-            println!("{message}");
+        if let Some(data) = &result.data {
+            if data["status"].as_str() == Some("manual-required") {
+                println!("{}", error.message);
+                if let Some(recovery_hint) = data["recoveryHint"].as_str() {
+                    println!("Next step: {recovery_hint}");
+                }
+                return;
+            }
+            println!("Failed to upgrade AGX.");
+            println!("Reason: {}", error.message);
+            if let Some(recovery_hint) = data["recoveryHint"].as_str() {
+                println!("Next step: {recovery_hint}");
+            }
+            if let Some(message) = data["message"].as_str() {
+                println!("{message}");
+            }
+        } else {
+            println!("{}", error.message);
         }
         return;
     }

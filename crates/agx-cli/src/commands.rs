@@ -548,6 +548,7 @@ fn upgrade_command(
     check: bool,
     context: &CliContext,
 ) -> CommandResult {
+    let inspection = self_upgrade::inspect_self(channel);
     match self_upgrade::upgrade_self(context, channel, check) {
         Ok(result) => {
             let stale_latest = result
@@ -572,8 +573,28 @@ fn upgrade_command(
             }
             command_result
         }
-        Err(error) => CommandResult::error(
+        Err(error) => CommandResult::error_with_data(
             "upgrade",
+            self_upgrade::UpgradeData {
+                channel: Some(inspection.update_channel),
+                command: Vec::new(),
+                current_version: Some(inspection.current_version),
+                dry_run: context.dry_run,
+                install_source: inspection.install_source,
+                latest_version: inspection.latest_version,
+                recovery_hint: self_upgrade::get_recovery_hint(
+                    inspection.install_source,
+                    inspection.update_channel,
+                ),
+                message: Some(error.message.clone()),
+                package_name: "agxctl",
+                status: if matches!(error.code, AgxErrorCode::ManualActionRequired) {
+                    "manual-required"
+                } else {
+                    "failed"
+                },
+                verified_version: None,
+            },
             error,
             CommandTarget {
                 kind: crate::output::TargetKind::SelfTarget,
