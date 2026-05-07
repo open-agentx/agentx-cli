@@ -2,7 +2,9 @@ mod support;
 
 use std::fs;
 
-use support::{TestWorkspace, run_agx, stdout_json, stdout_json_lines, stdout_text};
+use support::{
+    TestWorkspace, run_agx, run_agx_with_env, stdout_json, stdout_json_lines, stdout_text,
+};
 
 #[test]
 fn capabilities_json_reports_controlled_installer_availability() {
@@ -98,6 +100,58 @@ fn doctor_json_exposes_paths() {
 }
 
 #[test]
+fn doctor_json_reports_machine_actionable_self_issues() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "bun"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "doctor"],
+        &[("AGX_TEST_LATEST_VERSION", "0.2.0")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let issues = json["data"]["issues"]
+        .as_array()
+        .expect("issues should be an array");
+
+    assert!(issues.iter().any(|issue| {
+        issue["code"] == "SELF_INSTALLER_MISSING"
+            && issue["suggestedAction"] == "restore-self-installer"
+    }));
+    assert!(issues.iter().any(|issue| {
+        issue["code"] == "SELF_UPDATE_AVAILABLE" && issue["suggestedCommands"][0] == "agx upgrade"
+    }));
+}
+
+#[test]
+fn doctor_json_reports_untracked_agent_issue() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx(&workspace, &["--json", "doctor"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let issues = json["data"]["issues"]
+        .as_array()
+        .expect("issues should be an array");
+    assert!(issues.iter().any(|issue| {
+        issue["code"] == "AGENT_UNTRACKED_IN_PATH"
+            && issue["suggestedCommands"][0] == "agx inspect qoder --json"
+    }));
+}
+
+#[test]
 fn doctor_json_uses_source_build_heuristic_without_recorded_state() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "doctor"]);
@@ -145,6 +199,7 @@ fn doctor_human_output_includes_summary_and_check_names() {
     assert!(output.status.success());
     let stdout = stdout_text(&output);
     assert!(stdout.contains("AGX runtime checks completed with warnings."));
-    assert!(stdout.contains("\"name\":\"bun\""));
-    assert!(stdout.contains("\"name\":\"config\""));
+    assert!(stdout.contains("Managed Installers:"));
+    assert!(stdout.contains("AGX CLI:"));
+    assert!(stdout.contains("Issues:"));
 }

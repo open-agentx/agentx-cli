@@ -1102,10 +1102,14 @@ fn schema_catalog() -> Vec<SchemaDocument> {
         },
         SchemaDocument {
             data_schema: object_schema(vec![
+                ("agents", array_schema(object_schema(Vec::new()))),
                 ("checks", array_schema(object_schema(Vec::new()))),
                 ("installSource", object_schema(Vec::new())),
+                ("installers", object_schema(Vec::new())),
+                ("issues", array_schema(object_schema(Vec::new()))),
                 ("ok", boolean_schema()),
                 ("paths", object_schema(Vec::new())),
+                ("self", object_schema(Vec::new())),
                 ("summary", string_schema()),
             ]),
             description: "AGX runtime diagnostics",

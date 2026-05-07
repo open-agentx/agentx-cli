@@ -49,6 +49,43 @@ pub enum InstallSourceKind {
     Unknown,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfInspection {
+    pub can_auto_update: bool,
+    pub current_version: String,
+    pub executable_path: String,
+    pub install_source: InstallSourceKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recommended_upgrade_command: Option<String>,
+    pub update_channel: SelfUpdateChannel,
+}
+
+pub fn inspect_self(requested_channel: Option<SelfUpdateChannel>) -> SelfInspection {
+    let executable = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("agx"));
+    let install_source = detect_install_source(&executable);
+    let channel = resolve_channel(requested_channel);
+
+    SelfInspection {
+        can_auto_update: can_auto_update(install_source),
+        current_version: env!("CARGO_PKG_VERSION").to_string(),
+        executable_path: executable.to_string_lossy().into_owned(),
+        install_source,
+        latest_version: resolve_latest_version(channel),
+        recommended_upgrade_command: if can_auto_update(install_source) {
+            Some(match channel {
+                SelfUpdateChannel::Stable => "agx upgrade".to_string(),
+                SelfUpdateChannel::Beta => "agx upgrade --channel beta".to_string(),
+            })
+        } else {
+            None
+        },
+        update_channel: channel,
+    }
+}
+
 pub fn upgrade_self(
     context: &CliContext,
     requested_channel: Option<SelfUpdateChannel>,
@@ -176,6 +213,27 @@ fn upgrade_managed(
     })
 }
 
+pub fn get_recovery_hint(
+    install_source: InstallSourceKind,
+    channel: SelfUpdateChannel,
+) -> Option<String> {
+    let version_tag = if channel == SelfUpdateChannel::Beta {
+        "beta"
+    } else {
+        "latest"
+    };
+
+    match install_source {
+        InstallSourceKind::Bun => Some(format!("bun add -g {AGX_PACKAGE_NAME}@{version_tag}")),
+        InstallSourceKind::Npm => Some(format!("npm install -g {AGX_PACKAGE_NAME}@{version_tag}")),
+        InstallSourceKind::Standalone => {
+            Some("download and replace the AGX binary from the latest release assets".to_string())
+        }
+        InstallSourceKind::SourceBuild => Some("cargo build --release".to_string()),
+        InstallSourceKind::Unknown => None,
+    }
+}
+
 fn detect_install_source(executable: &Path) -> InstallSourceKind {
     if let Some(recorded) = state::load_state().self_state.install_source {
         return match recorded.as_str() {
@@ -287,4 +345,11 @@ fn is_version_newer(candidate: &str, current: &str) -> bool {
         (Ok(candidate), Ok(current)) => candidate > current,
         _ => candidate != current,
     }
+}
+
+fn can_auto_update(install_source: InstallSourceKind) -> bool {
+    matches!(
+        install_source,
+        InstallSourceKind::Bun | InstallSourceKind::Npm | InstallSourceKind::Standalone
+    )
 }

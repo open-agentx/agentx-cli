@@ -232,6 +232,11 @@ fn render_human(result: &CommandResult) {
         "capabilities" => println!(
             "AGX Capabilities\n\nRun `agx capabilities --json` for environment capabilities."
         ),
+        "doctor" => {
+            if let Some(data) = &result.data {
+                render_doctor(data);
+            }
+        }
         _ => {
             if let Some(data) = &result.data {
                 println!("{data}");
@@ -247,4 +252,129 @@ fn current_timestamp() -> String {
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs());
     format!("{seconds}")
+}
+
+#[allow(clippy::too_many_lines)]
+fn render_doctor(data: &Value) {
+    println!("AGX Environment Check\n");
+    if let Some(summary) = data["summary"].as_str() {
+        println!("{summary}\n");
+    }
+    println!("Managed Installers:");
+    println!(
+        "  Bun:   {}",
+        if data["installers"]["bun"].as_bool().unwrap_or(false) {
+            "available"
+        } else {
+            "not found"
+        }
+    );
+    println!(
+        "  npm:   {}",
+        if data["installers"]["npm"].as_bool().unwrap_or(false) {
+            "available"
+        } else {
+            "not found"
+        }
+    );
+    println!(
+        "  brew:  {}",
+        if data["installers"]["brew"].as_bool().unwrap_or(false) {
+            "available"
+        } else {
+            "not found"
+        }
+    );
+    println!(
+        "  winget:{}",
+        if data["installers"]["winget"].as_bool().unwrap_or(false) {
+            "available"
+        } else {
+            "not found"
+        }
+    );
+
+    println!("\nAGX CLI:");
+    println!(
+        "  Version:      {}",
+        data["self"]["currentVersion"].as_str().unwrap_or("unknown")
+    );
+    println!(
+        "  Source:       {}",
+        data["self"]["installSource"].as_str().unwrap_or("unknown")
+    );
+    println!(
+        "  Auto-update:  {}",
+        if data["self"]["canAutoUpdate"].as_bool().unwrap_or(false) {
+            "supported"
+        } else {
+            "unsupported"
+        }
+    );
+    if let Some(latest) = data["self"]["latestVersion"].as_str() {
+        println!(
+            "  Latest:       {}{}",
+            latest,
+            if data["self"]["outdated"].as_bool().unwrap_or(false) {
+                " (update available)"
+            } else {
+                ""
+            }
+        );
+    }
+    if let Some(recovery) = data["self"]["recoveryHint"].as_str() {
+        println!("  Recovery:     {recovery}");
+    }
+
+    println!("\nInstalled Agents:");
+    if data["agents"]
+        .as_array()
+        .is_some_and(std::vec::Vec::is_empty)
+    {
+        println!("  No agents installed");
+    } else if let Some(agents) = data["agents"].as_array() {
+        for agent in agents {
+            println!(
+                "  {}: {} [{}; {}]{}",
+                agent["displayName"].as_str().unwrap_or("unknown"),
+                agent["installedVersion"].as_str().unwrap_or("unknown"),
+                agent["lifecycle"].as_str().unwrap_or("unknown"),
+                agent["sourceLabel"].as_str().unwrap_or("unknown"),
+                if agent["outdated"].as_bool().unwrap_or(false) {
+                    format!(
+                        " (update available: {})",
+                        agent["latestVersion"].as_str().unwrap_or("unknown")
+                    )
+                } else {
+                    String::new()
+                }
+            );
+        }
+    }
+
+    println!("\nIssues:");
+    if data["issues"]
+        .as_array()
+        .is_some_and(std::vec::Vec::is_empty)
+    {
+        println!("  No issues found.");
+    } else if let Some(issues) = data["issues"].as_array() {
+        for issue in issues {
+            println!(
+                "  - {}",
+                issue["message"].as_str().unwrap_or("unknown issue")
+            );
+            if let Some(commands) = issue["suggestedCommands"].as_array()
+                && !commands.is_empty()
+            {
+                let next: Vec<_> = commands
+                    .iter()
+                    .filter_map(|command| command.as_str())
+                    .collect();
+                println!("    Next: {}", next.join(" | "));
+            }
+        }
+    }
+
+    println!();
 }
