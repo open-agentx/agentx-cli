@@ -105,7 +105,19 @@ pub fn execute_agent(
     if matches!(install_policy, InstallPolicyArg::Always)
         || (!installed_before && matches!(install_policy, InstallPolicyArg::IfMissing))
     {
-        package_manager::ensure_agent(agent, context)?;
+        package_manager::ensure_agent(agent, context).map_err(|error| {
+            if matches!(error.code, AgxErrorCode::InstallFailed) {
+                AgxError::new(
+                    error.code,
+                    format!(
+                        "Failed to install {}. {}",
+                        agent.display_name, error.message
+                    ),
+                )
+            } else {
+                error
+            }
+        })?;
     }
 
     let Some(binary_path) = inspection::find_binary_in_path(agent.binary_name) else {
@@ -119,7 +131,18 @@ pub fn execute_agent(
     };
 
     let command = build_display_command(&binary_path.to_string_lossy(), args);
-    let output = run_agent_command(&binary_path, args, context.timeout_ms)?;
+    let output = run_agent_command(&binary_path, args, context.timeout_ms).map_err(|error| {
+        if matches!(error.code, AgxErrorCode::InvalidArgument)
+            && error.message.contains("Failed to execute agent")
+        {
+            AgxError::new(
+                error.code,
+                format!("Failed to launch {}. {}", agent.display_name, error.message),
+            )
+        } else {
+            error
+        }
+    })?;
     Ok(ExecResult {
         agent: exec_agent(agent),
         execution: ExecExecution {

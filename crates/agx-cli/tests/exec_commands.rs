@@ -1,6 +1,6 @@
 mod support;
 
-use support::{TestWorkspace, run_agx, stdout_json, stdout_json_lines};
+use support::{TestWorkspace, run_agx, run_agx_with_env, stdout_json, stdout_json_lines};
 
 #[test]
 fn explicit_exec_returns_structured_process_result() {
@@ -259,6 +259,33 @@ fn shortcut_exec_assume_yes_installs_without_prompt() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("agx 0.1.0"));
+}
+
+#[test]
+fn shortcut_exec_install_failure_surfaces_install_error() {
+    let workspace = TestWorkspace::new();
+
+    let output = support::run_agx_with_stdin(&workspace, &["qoder", "--", "--version"], &[], "y\n");
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("Failed to install Qoder CLI"));
+}
+
+#[test]
+fn shortcut_exec_spawn_failure_surfaces_launch_error() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["qoder", "--", "--version"],
+        &[("AGX_TEST_EXEC_MODE", "spawn-fail")],
+    );
+
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("Failed to launch Qoder CLI"));
 }
 
 #[test]
