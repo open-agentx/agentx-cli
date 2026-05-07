@@ -22,12 +22,13 @@ pub fn inspect_agent(agent: AgentDefinition) -> AgentInspection {
     let binary_path = find_binary_in_path(agent.binary_name);
     let installed = binary_path.is_some();
     let installed_version = binary_path.as_ref().and_then(get_installed_version);
+    let latest_version = agent.npm_package.and_then(get_latest_version);
 
     AgentInspection {
         binary_path: binary_path.map(|path| path.to_string_lossy().into_owned()),
         installed,
         installed_version,
-        latest_version: None,
+        latest_version,
         lifecycle: "unmanaged".to_string(),
         source_label: "untracked".to_string(),
         update_label: "manual".to_string(),
@@ -91,4 +92,22 @@ fn parse_version(stdout: &str) -> Option<String> {
             })
             .to_string()
         })
+}
+
+fn get_latest_version(package_name: &str) -> Option<String> {
+    let env_key = format!("AGX_TEST_LATEST_PACKAGE_{}", sanitize_env_key(package_name));
+    std::env::var(env_key).ok()
+}
+
+fn sanitize_env_key(value: &str) -> String {
+    value
+        .chars()
+        .map(|char| {
+            if char.is_ascii_alphanumeric() {
+                char.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect()
 }

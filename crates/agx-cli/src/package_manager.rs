@@ -22,9 +22,17 @@ pub struct LifecycleResult {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateResult {
     pub display_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub installed_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_version: Option<String>,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource: Option<String>,
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub strategy: Option<String>,
@@ -136,75 +144,98 @@ pub fn uninstall_agent(
 
 pub fn update_agent(
     agent: AgentDefinition,
+    installed_state: Option<&InstalledAgentState>,
+    installed_version: Option<String>,
+    latest_version: Option<String>,
     context: &CliContext,
 ) -> Result<UpdateResult, AgxError> {
-    let Some(installed_state) = state::get_installed_agent_state(agent.name) else {
-        return Err(AgxError::new(
-            AgxErrorCode::AgentNotInstalled,
-            format!("{} is not tracked as installed by AGX.", agent.display_name),
-        ));
-    };
+    let strategy = update_strategy(agent, installed_state);
 
-    update_tracked_agent(agent, &installed_state, context)
+    match strategy {
+        "managed" => update_managed_agent(
+            agent,
+            installed_state,
+            installed_version,
+            latest_version,
+            context,
+        ),
+        "self-update" => Ok(update_self_updating_agent(
+            agent,
+            installed_state,
+            installed_version,
+            latest_version,
+            context,
+        )),
+        _ => Ok(UpdateResult {
+            display_name: agent.display_name.to_string(),
+            hint: Some(get_update_failure_hint(agent, "manual-hint")),
+            installed_version,
+            latest_version,
+            name: agent.name.to_string(),
+            message: Some(format!(
+                "{} uses a manually managed install source. Please check for updates manually.",
+                agent.display_name
+            )),
+            resource: None,
+            status: "manual-required",
+            strategy: Some("manual-hint".to_string()),
+        }),
+    }
 }
 
-pub fn update_all_agents(context: &CliContext) -> Vec<UpdateResult> {
-    let mut installed_agents: Vec<_> = state::load_state().installed_agents.into_values().collect();
-    installed_agents.sort_by(|left, right| {
-        left.install_type
-            .cmp(&right.install_type)
-            .then_with(|| left.agent_name.cmp(&right.agent_name))
-    });
-
-    installed_agents
-        .iter()
-        .map(|installed_state| {
-            let Some(agent) = crate::agents::resolve_agent(&installed_state.agent_name) else {
-                return UpdateResult {
-                    display_name: installed_state.agent_name.clone(),
-                    name: installed_state.agent_name.clone(),
-                    message: Some("Tracked agent is no longer in the AGX catalog.".to_string()),
-                    status: "manual-required",
-                    strategy: None,
-                };
-            };
-
-            update_tracked_agent(agent, installed_state, context).unwrap_or_else(|error| {
-                UpdateResult {
-                    display_name: agent.display_name.to_string(),
-                    name: agent.name.to_string(),
-                    message: Some(error.message),
-                    status: "failed",
-                    strategy: Some(format!("managed/{}", installed_state.install_type)),
-                }
-            })
-        })
-        .collect()
-}
-
-fn update_tracked_agent(
+fn update_managed_agent(
     agent: AgentDefinition,
-    installed_state: &InstalledAgentState,
+    installed_state: Option<&InstalledAgentState>,
+    installed_version: Option<String>,
+    latest_version: Option<String>,
     context: &CliContext,
 ) -> Result<UpdateResult, AgxError> {
-    let Some(package_name) = installed_state.package_name.as_deref() else {
+    let (install_type, package_name) = if let Some(installed_state) = installed_state {
+        let Some(package_name) = installed_state.package_name.as_deref() else {
+            return Ok(UpdateResult {
+                display_name: agent.display_name.to_string(),
+                hint: None,
+                installed_version,
+                latest_version,
+                name: agent.name.to_string(),
+                message: Some("No managed package is recorded for this agent.".to_string()),
+                resource: None,
+                status: "manual-required",
+                strategy: None,
+            });
+        };
+        (installed_state.install_type.as_str(), package_name)
+    } else if let Some(package_name) = agent.npm_package {
+        (preferred_package_manager(), package_name)
+    } else {
         return Ok(UpdateResult {
             display_name: agent.display_name.to_string(),
+            hint: Some(get_update_failure_hint(agent, "manual-hint")),
+            installed_version,
+            latest_version,
             name: agent.name.to_string(),
-            message: Some("No managed package is recorded for this agent.".to_string()),
+            message: Some(format!(
+                "{} uses a manually managed install source. Please check for updates manually.",
+                agent.display_name
+            )),
+            resource: None,
             status: "manual-required",
-            strategy: None,
+            strategy: Some("manual-hint".to_string()),
         });
     };
 
-    let command = install_command(&installed_state.install_type, package_name);
-    let strategy = Some(format!("managed/{}", installed_state.install_type));
+    let command = install_command(install_type, package_name);
+    let strategy = Some(format!("managed/{install_type}"));
 
     if context.dry_run {
         return Ok(UpdateResult {
             display_name: agent.display_name.to_string(),
+            hint: None,
+            installed_version,
+            latest_version,
             name: agent.name.to_string(),
             message: Some(format!("Dry run: would run `{}`.", command.join(" "))),
+            resource: None,
             status: "planned",
             strategy,
         });
@@ -213,11 +244,92 @@ fn update_tracked_agent(
     run_external_command(&command, AgxErrorCode::UpdateFailed)?;
     Ok(UpdateResult {
         display_name: agent.display_name.to_string(),
+        hint: None,
+        installed_version,
+        latest_version,
         name: agent.name.to_string(),
         message: None,
+        resource: None,
         status: "updated",
         strategy,
     })
+}
+
+fn update_self_updating_agent(
+    agent: AgentDefinition,
+    installed_state: Option<&InstalledAgentState>,
+    installed_version: Option<String>,
+    latest_version: Option<String>,
+    context: &CliContext,
+) -> UpdateResult {
+    let commands = if let Some(installed_state) = installed_state {
+        installed_state.command.as_deref().map_or_else(
+            || crate::agents::self_update_commands(agent),
+            |command| vec![command],
+        )
+    } else {
+        crate::agents::self_update_commands(agent)
+    };
+
+    if commands.is_empty() {
+        return UpdateResult {
+            display_name: agent.display_name.to_string(),
+            hint: Some(get_update_failure_hint(agent, "manual-hint")),
+            installed_version,
+            latest_version,
+            name: agent.name.to_string(),
+            message: Some(format!(
+                "{} uses a manually managed install source. Please check for updates manually.",
+                agent.display_name
+            )),
+            resource: None,
+            status: "manual-required",
+            strategy: Some("manual-hint".to_string()),
+        };
+    }
+
+    if context.dry_run {
+        return UpdateResult {
+            display_name: agent.display_name.to_string(),
+            hint: None,
+            installed_version,
+            latest_version,
+            name: agent.name.to_string(),
+            message: Some(format!("Dry run: would run `{}`.", commands[0])),
+            resource: None,
+            status: "planned",
+            strategy: Some("self-update".to_string()),
+        };
+    }
+
+    for command in commands {
+        let parsed = shell_words(command);
+        if run_external_command(&parsed, AgxErrorCode::UpdateFailed).is_ok() {
+            return UpdateResult {
+                display_name: agent.display_name.to_string(),
+                hint: None,
+                installed_version,
+                latest_version,
+                name: agent.name.to_string(),
+                message: None,
+                resource: None,
+                status: "updated",
+                strategy: Some("self-update".to_string()),
+            };
+        }
+    }
+
+    UpdateResult {
+        display_name: agent.display_name.to_string(),
+        hint: Some(get_update_failure_hint(agent, "self-update")),
+        installed_version,
+        latest_version,
+        name: agent.name.to_string(),
+        message: Some(format!("Failed to update {}.", agent.display_name)),
+        resource: None,
+        status: "failed",
+        strategy: Some("self-update".to_string()),
+    }
 }
 
 fn preferred_package_manager() -> &'static str {
@@ -280,6 +392,10 @@ fn installed_state(
 }
 
 fn run_external_command(command: &[String], error_code: AgxErrorCode) -> Result<(), AgxError> {
+    if std::env::var("AGX_TEST_ALLOW_EXTERNAL_SUCCESS").as_deref() == Ok("1") {
+        return Ok(());
+    }
+
     let Some((program, args)) = command.split_first() else {
         return Err(AgxError::new(
             AgxErrorCode::InvalidArgument,
@@ -287,19 +403,70 @@ fn run_external_command(command: &[String], error_code: AgxErrorCode) -> Result<
         ));
     };
 
-    let status = Command::new(program).args(args).status().map_err(|error| {
+    let output = Command::new(program).args(args).output().map_err(|error| {
         AgxError::new(
             error_code,
             format!("Failed to run `{}`: {error}", command.join(" ")),
         )
     })?;
 
-    if status.success() {
+    if output.status.success() {
         Ok(())
     } else {
         Err(AgxError::new(
             error_code,
-            format!("Command `{}` exited with {status}.", command.join(" ")),
+            format!(
+                "Command `{}` exited with {}.",
+                command.join(" "),
+                output.status
+            ),
         ))
     }
+}
+
+fn update_strategy(
+    agent: AgentDefinition,
+    installed_state: Option<&InstalledAgentState>,
+) -> &'static str {
+    if installed_state.is_some_and(|state| {
+        matches!(
+            state.install_type.as_str(),
+            "bun" | "npm" | "brew" | "winget"
+        )
+    }) {
+        "managed"
+    } else if installed_state
+        .and_then(|state| state.command.as_ref())
+        .is_some()
+        || (installed_state.is_some() && !crate::agents::self_update_commands(agent).is_empty())
+    {
+        "self-update"
+    } else if agent.npm_package.is_some() {
+        "managed"
+    } else if installed_state
+        .and_then(|state| state.command.as_ref())
+        .is_some()
+        || !crate::agents::self_update_commands(agent).is_empty()
+    {
+        "self-update"
+    } else {
+        "manual-hint"
+    }
+}
+
+fn get_update_failure_hint(agent: AgentDefinition, strategy: &str) -> String {
+    if strategy == "self-update"
+        && let Some(command) = crate::agents::self_update_commands(agent).first()
+    {
+        return format!("Try running {command} directly.");
+    }
+
+    format!("Check {} for the recommended update path.", agent.homepage)
+}
+
+fn shell_words(command: &str) -> Vec<String> {
+    command
+        .split_whitespace()
+        .map(ToString::to_string)
+        .collect()
 }

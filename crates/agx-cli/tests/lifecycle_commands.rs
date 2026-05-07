@@ -1,6 +1,6 @@
 mod support;
 
-use support::{TestWorkspace, run_agx, stdout_json, stdout_json_lines};
+use support::{TestWorkspace, run_agx, run_agx_with_env, stdout_json, stdout_json_lines};
 
 #[test]
 fn install_unknown_agent_returns_agent_not_found() {
@@ -317,4 +317,158 @@ fn update_ndjson_emits_single_result_event() {
     assert_eq!(lines[0]["action"], "update");
     assert_eq!(lines[0]["meta"]["mode"], "ndjson");
     assert_eq!(lines[0]["data"]["data"]["results"][0]["status"], "planned");
+}
+
+#[test]
+fn update_single_reports_up_to_date_when_versions_match() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "qoder"],
+        &[("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "0.1.0")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["results"][0]["status"], "up-to-date");
+    assert_eq!(json["data"]["results"][0]["installedVersion"], "0.1.0");
+    assert_eq!(json["data"]["results"][0]["latestVersion"], "0.1.0");
+}
+
+#[test]
+fn update_all_marks_untracked_path_installs_as_manual_required() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx(&workspace, &["--json", "update", "--all"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let result = json["data"]["results"]
+        .as_array()
+        .expect("results should be an array")
+        .iter()
+        .find(|entry| entry["name"] == "qoder")
+        .expect("qoder result should exist");
+    assert_eq!(result["status"], "manual-required");
+    assert!(
+        result["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("detected in PATH but not tracked")
+    );
+    assert!(
+        result["hint"]
+            .as_str()
+            .expect("hint should exist")
+            .contains("agx inspect qoder --json")
+    );
+}
+
+#[test]
+fn update_all_includes_tracked_script_installs_via_self_update() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "script",
+      "command": "qodercli update"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "--all"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let result = json["data"]["results"]
+        .as_array()
+        .expect("results should be an array")
+        .iter()
+        .find(|entry| entry["name"] == "qoder")
+        .expect("qoder result should exist");
+    assert_eq!(result["status"], "updated");
+    assert_eq!(result["strategy"], "self-update");
+}
+
+#[test]
+fn update_single_uses_managed_update_for_untracked_known_package_agents() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "qoder"],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "0.2.0"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["results"][0]["status"], "updated");
+    assert_eq!(json["data"]["results"][0]["strategy"], "managed/bun");
+}
+
+#[test]
+fn update_single_self_update_failure_returns_hint() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "script",
+      "command": "qodercli update"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "qoder"],
+        &[("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "0.2.0")],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "UPDATE_FAILED");
+    assert_eq!(json["data"]["results"][0]["status"], "failed");
+    assert!(
+        json["data"]["results"][0]["hint"]
+            .as_str()
+            .expect("hint should exist")
+            .contains("Try running qodercli update directly")
+    );
 }

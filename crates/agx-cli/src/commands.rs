@@ -584,9 +584,119 @@ fn upgrade_command(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> CommandResult {
     if all {
-        let results = package_manager::update_all_agents(context);
+        let mut results = Vec::new();
+        for agent in agents::all_agents() {
+            let inspection = resolved_agent_inspection(*agent);
+            let installed_state = crate::state::get_installed_agent_state(agent.name);
+
+            if !inspection.installed && installed_state.is_none() {
+                continue;
+            }
+
+            if inspection.installed && installed_state.is_none() {
+                results.push(package_manager::UpdateResult {
+                    display_name: agent.display_name.to_string(),
+                    hint: Some(format!(
+                        "Use `agx inspect {} --json` to confirm the source, then reinstall through AGX if you want `agx update --all` to manage it.",
+                        agent.name
+                    )),
+                    installed_version: inspection.installed_version,
+                    latest_version: inspection.latest_version,
+                    name: agent.name.to_string(),
+                    message: Some(format!(
+                        "{} is detected in PATH but not tracked as an AGX-managed install.",
+                        agent.display_name
+                    )),
+                    resource: None,
+                    status: "manual-required",
+                    strategy: Some("manual-hint".to_string()),
+                });
+                continue;
+            }
+
+            if inspection.installed_version.is_some()
+                && inspection.installed_version == inspection.latest_version
+            {
+                results.push(package_manager::UpdateResult {
+                    display_name: agent.display_name.to_string(),
+                    hint: None,
+                    installed_version: inspection.installed_version,
+                    latest_version: inspection.latest_version,
+                    name: agent.name.to_string(),
+                    message: None,
+                    resource: None,
+                    status: "up-to-date",
+                    strategy: Some(inspection.update_label.clone()),
+                });
+                continue;
+            }
+
+            if inspection.latest_version.is_none()
+                && agent.npm_package.is_none()
+                && agents::self_update_commands(*agent).is_empty()
+            {
+                results.push(package_manager::UpdateResult {
+                    display_name: agent.display_name.to_string(),
+                    hint: Some(format!("Check {} for the recommended update path.", agent.homepage)),
+                    installed_version: inspection.installed_version,
+                    latest_version: inspection.latest_version,
+                    name: agent.name.to_string(),
+                    message: Some(format!(
+                        "{} uses a manually managed install source. Please check for updates manually.",
+                        agent.display_name
+                    )),
+                    resource: None,
+                    status: "manual-required",
+                    strategy: Some("manual-hint".to_string()),
+                });
+                continue;
+            }
+
+            results.push(
+                package_manager::update_agent(
+                    *agent,
+                    installed_state.as_ref(),
+                    inspection.installed_version,
+                    inspection.latest_version,
+                    context,
+                )
+                .unwrap_or_else(|error| package_manager::UpdateResult {
+                    display_name: agent.display_name.to_string(),
+                    hint: None,
+                    installed_version: None,
+                    latest_version: None,
+                    name: agent.name.to_string(),
+                    message: Some(error.message),
+                    resource: None,
+                    status: if matches!(error.code, AgxErrorCode::ResourceLocked) {
+                        "locked"
+                    } else {
+                        "failed"
+                    },
+                    strategy: Some(inspection.update_label.clone()),
+                }),
+            );
+        }
+
+        for installed_state in crate::state::load_state().installed_agents.into_values() {
+            if agents::resolve_agent(&installed_state.agent_name).is_none() {
+                results.push(package_manager::UpdateResult {
+                    display_name: installed_state.agent_name.clone(),
+                    hint: None,
+                    installed_version: None,
+                    latest_version: None,
+                    name: installed_state.agent_name.clone(),
+                    message: Some("Tracked agent is no longer in the AGX catalog.".to_string()),
+                    resource: None,
+                    status: "manual-required",
+                    strategy: None,
+                });
+            }
+        }
+
         let has_failures = results
             .iter()
             .any(|result| matches!(result.status, "failed" | "locked"));
@@ -624,7 +734,73 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
         return agent_not_found_result("update", agent_name, context);
     };
 
-    match package_manager::update_agent(agent, context) {
+    let inspection = resolved_agent_inspection(agent);
+    let installed_state = crate::state::get_installed_agent_state(agent.name);
+    if !inspection.installed && installed_state.is_none() {
+        return CommandResult::error(
+            "update",
+            AgxError::new(
+                AgxErrorCode::AgentNotInstalled,
+                format!("{} is not installed.", agent.display_name),
+            ),
+            CommandTarget::agent(agent.name),
+            context,
+        );
+    }
+
+    if inspection.installed_version.is_some()
+        && inspection.installed_version == inspection.latest_version
+    {
+        return CommandResult::success(
+            "update",
+            UpdateData {
+                results: vec![package_manager::UpdateResult {
+                    display_name: agent.display_name.to_string(),
+                    hint: None,
+                    installed_version: inspection.installed_version,
+                    latest_version: inspection.latest_version,
+                    name: agent.name.to_string(),
+                    message: None,
+                    resource: None,
+                    status: "up-to-date",
+                    strategy: Some(inspection.update_label.clone()),
+                }],
+                scope: "single",
+            },
+            CommandTarget::agent(agent.name),
+            context,
+        );
+    }
+
+    match package_manager::update_agent(
+        agent,
+        installed_state.as_ref(),
+        inspection.installed_version,
+        inspection.latest_version,
+        context,
+    ) {
+        Ok(result) if matches!(result.status, "failed" | "locked") => {
+            CommandResult::error_with_data(
+                "update",
+                UpdateData {
+                    results: vec![result.clone()],
+                    scope: "single",
+                },
+                AgxError::new(
+                    if result.status == "locked" {
+                        AgxErrorCode::ResourceLocked
+                    } else {
+                        AgxErrorCode::UpdateFailed
+                    },
+                    result
+                        .message
+                        .clone()
+                        .unwrap_or_else(|| format!("Failed to update {}.", agent.display_name)),
+                ),
+                CommandTarget::agent(agent.name),
+                context,
+            )
+        }
         Ok(result) => CommandResult::success(
             "update",
             UpdateData {
@@ -1278,13 +1454,13 @@ fn agent_info(agent: AgentDefinition) -> AgentInfo {
         install_methods: install_methods(agent),
         name: agent.name,
         package_name: agent.npm_package,
-        self_update_commands: self_update_commands(agent),
+        self_update_commands: agents::self_update_commands(agent),
     }
 }
 
 fn agent_capabilities(agent: AgentDefinition) -> AgentCapabilities {
     let inspection = resolved_agent_inspection(agent);
-    let self_update_commands = self_update_commands(agent);
+    let self_update_commands = agents::self_update_commands(agent);
     let can_self_update = !self_update_commands.is_empty();
 
     AgentCapabilities {
@@ -1323,30 +1499,6 @@ fn install_methods(agent: AgentDefinition) -> Vec<InstallMethodInfo> {
             },
         ]
     })
-}
-
-fn self_update_commands(agent: AgentDefinition) -> Vec<&'static str> {
-    match agent.name {
-        "amp" => vec!["amp update"],
-        "auggie" => vec!["auggie upgrade"],
-        "claude" => vec!["claude update", "claude upgrade"],
-        "codebuddy" => vec!["codebuddy update"],
-        "codex" => vec!["codex --upgrade"],
-        "crush" => vec!["crush update"],
-        "cursor" => vec!["agent update"],
-        "deepseek" => vec!["deepseek update"],
-        "devin" => vec!["devin update"],
-        "droid" => vec!["droid update"],
-        "forgecode" => vec!["forge update"],
-        "goose" => vec!["goose update"],
-        "kilo" => vec!["kilo upgrade"],
-        "kimi" => vec!["uv tool upgrade kimi-cli --no-cache"],
-        "opencode" => vec!["opencode upgrade"],
-        "openhands" => vec!["uv tool upgrade openhands --python 3.12"],
-        "pi" => vec!["pi update"],
-        "qoder" => vec!["qodercli update"],
-        _ => Vec::new(),
-    }
 }
 
 fn lifecycle_for(installed_state: Option<&crate::state::InstalledAgentState>) -> &'static str {
@@ -1408,7 +1560,7 @@ fn update_label_for(
 ) -> String {
     if installed_state.is_some_and(|state| is_managed_install_type(&state.install_type)) {
         "managed update".to_string()
-    } else if !self_update_commands(agent).is_empty() {
+    } else if !agents::self_update_commands(agent).is_empty() {
         "command update".to_string()
     } else {
         "manual update".to_string()

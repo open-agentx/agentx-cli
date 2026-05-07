@@ -260,6 +260,7 @@ fn render_human(result: &CommandResult) {
         "inspect" => render_inspect(result),
         "resolve" => render_resolve(result),
         "upgrade" => render_upgrade(result),
+        "update" => render_update(result),
         _ => {
             if let Some(error) = &result.error {
                 eprintln!("{}", error.message);
@@ -722,6 +723,65 @@ fn render_upgrade(result: &CommandResult) {
         }
         "upgraded" => println!("AGX upgraded successfully."),
         _ => println!("{data}"),
+    }
+}
+
+fn render_update(result: &CommandResult) {
+    if let Some(error) = &result.error {
+        println!("{}", error.message);
+    }
+
+    let Some(data) = &result.data else {
+        return;
+    };
+
+    if let Some(results) = data["results"].as_array() {
+        for result in results {
+            let name = result["displayName"].as_str().unwrap_or("Unknown");
+            let status = result["status"].as_str().unwrap_or("unknown");
+            match status {
+                "up-to-date" => {
+                    let version = result["installedVersion"].as_str().unwrap_or("unknown");
+                    println!("{name} is up to date ({version})");
+                }
+                "updated" => {
+                    let strategy = result["strategy"].as_str().unwrap_or("update");
+                    let version_text = match (
+                        result["installedVersion"].as_str(),
+                        result["latestVersion"].as_str(),
+                    ) {
+                        (Some(installed), Some(latest)) => format!(" ({installed} -> {latest})"),
+                        _ => String::new(),
+                    };
+                    println!("Updating {name} via {strategy}...{version_text}");
+                    println!("{name} updated successfully");
+                }
+                "planned" => println!(
+                    "Dry run: would update {name}. {}",
+                    result["message"].as_str().unwrap_or("")
+                ),
+                "manual-required" => {
+                    println!("{name}: manual action required.");
+                    if let Some(message) = result["message"].as_str() {
+                        println!("{message}");
+                    }
+                    if let Some(hint) = result["hint"].as_str() {
+                        println!("Next step: {hint}");
+                    }
+                }
+                "failed" | "locked" => {
+                    if let Some(message) = result["message"].as_str() {
+                        println!("{message}");
+                    } else {
+                        println!("Failed to update {name}.");
+                    }
+                    if let Some(hint) = result["hint"].as_str() {
+                        println!("Next step: {hint}");
+                    }
+                }
+                _ => println!("{result}"),
+            }
+        }
     }
 }
 
