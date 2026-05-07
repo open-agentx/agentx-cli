@@ -283,15 +283,9 @@ fn create_ndjson_event<'a>(result: &'a CommandResult, context: &CliContext) -> i
 
 fn render_human(result: &CommandResult) {
     match result.action.as_str() {
-        "commands" => {
-            println!("AGX Commands\n\nRun `agx commands --json` for the stable command catalog.");
-        }
-        "schema" => {
-            println!("AGX Schemas\n\nRun `agx schema --json` for structured output schemas.");
-        }
-        "capabilities" => println!(
-            "AGX Capabilities\n\nRun `agx capabilities --json` for environment capabilities."
-        ),
+        "commands" => render_commands(result),
+        "schema" => render_schema(result),
+        "capabilities" => render_capabilities(result),
         "doctor" => {
             if let Some(data) = &result.data {
                 render_doctor(data);
@@ -308,7 +302,7 @@ fn render_human(result: &CommandResult) {
             if let Some(error) = &result.error {
                 eprintln!("{}", error.message);
             } else if let Some(data) = &result.data {
-                println!("{data}");
+                render_default_human(result.action.as_str(), data);
             }
         }
     }
@@ -321,6 +315,154 @@ fn current_timestamp() -> String {
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs());
     format!("{seconds}")
+}
+
+fn render_default_human(action: &str, data: &Value) {
+    match action {
+        "config" => render_config(data),
+        _ => println!("{data}"),
+    }
+}
+
+fn render_capabilities(result: &CommandResult) {
+    let Some(data) = &result.data else {
+        println!("AGX Capabilities");
+        return;
+    };
+
+    println!("AGX Capabilities\n");
+    println!(
+        "Platform: {}/{}",
+        data["platform"]["os"].as_str().unwrap_or("unknown"),
+        data["platform"]["arch"].as_str().unwrap_or("unknown")
+    );
+    println!(
+        "Agents:   {}",
+        data["agents"].as_array().map_or(0, std::vec::Vec::len)
+    );
+
+    println!("\nFeatures:");
+    for (label, key) in [
+        ("--yes", "assumeYes"),
+        ("dry-run", "dryRun"),
+        ("self-upgrade", "selfUpgrade"),
+        ("exec-install-policy", "execInstallPolicies"),
+        ("cache-refresh", "cacheRefresh"),
+        ("cache-bypass", "cacheBypass"),
+    ] {
+        let value = if key == "execInstallPolicies" {
+            data["features"][key].as_array().map_or_else(
+                || "unknown".to_string(),
+                |items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                },
+            )
+        } else if data["features"][key].as_bool().unwrap_or(false) {
+            "yes".to_string()
+        } else {
+            "no".to_string()
+        };
+        println!("  {label}: {value}");
+    }
+
+    println!("\nInstallers:");
+    for installer in ["bun", "npm", "brew", "winget"] {
+        let available = data["installers"][installer]["available"]
+            .as_bool()
+            .unwrap_or(false);
+        println!(
+            "  {installer}: {}",
+            if available { "available" } else { "not found" }
+        );
+    }
+
+    println!("\nRun `agx capabilities --json` for machine-readable capability data.\n");
+}
+
+fn render_commands(result: &CommandResult) {
+    let Some(data) = &result.data else {
+        println!("AGX Commands");
+        return;
+    };
+
+    println!("AGX Commands\n");
+    if let Some(commands) = data["commands"].as_array() {
+        for command in commands {
+            println!(
+                "  {:<12} {}",
+                command["name"].as_str().unwrap_or("unknown"),
+                command["summary"].as_str().unwrap_or("")
+            );
+        }
+    }
+    println!("\nRun `agx commands --json` for the stable command catalog.\n");
+}
+
+fn render_schema(result: &CommandResult) {
+    let Some(data) = &result.data else {
+        println!("AGX Schemas");
+        return;
+    };
+
+    println!("AGX Schemas\n");
+    if let Some(commands) = data["commands"].as_array() {
+        for command in commands {
+            println!(
+                "  {:<12} {}",
+                command["name"].as_str().unwrap_or("unknown"),
+                command["description"].as_str().unwrap_or("")
+            );
+        }
+    }
+    println!("\nRun `agx schema --json` for structured output schemas.\n");
+}
+
+fn render_config(data: &Value) {
+    let action = data["action"].as_str().unwrap_or("list");
+    match action {
+        "list" | "reset" => {
+            println!("Configuration\n");
+            if let Some(config) = data["config"].as_object() {
+                for (key, value) in config {
+                    if !value.is_null() {
+                        let value_text = value
+                            .as_str()
+                            .map_or_else(|| value.to_string(), ToString::to_string);
+                        println!("  {key}: {value_text}");
+                    }
+                }
+            }
+            if action == "reset" {
+                println!("\nConfiguration reset to defaults.");
+            }
+            println!();
+        }
+        "get" => {
+            if let Some(key) = data["key"].as_str() {
+                let value = &data["value"];
+                if value.is_null() {
+                    println!("{key} is not set");
+                } else if let Some(string) = value.as_str() {
+                    println!("{string}");
+                } else {
+                    println!("{value}");
+                }
+            }
+        }
+        "set" => {
+            let key = data["key"].as_str().unwrap_or("unknown");
+            let value = &data["value"];
+            let value_text = value
+                .as_str()
+                .map_or_else(|| value.to_string(), ToString::to_string);
+            println!("Set {key} = {value_text}");
+        }
+        _ => println!("{data}"),
+    }
 }
 
 #[allow(clippy::too_many_lines)]

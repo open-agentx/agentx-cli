@@ -1545,18 +1545,60 @@ fn schema_catalog() -> Vec<SchemaDocument> {
     let envelope_schema = object_schema(vec![
         ("action", string_schema()),
         ("data", object_schema(Vec::new())),
-        ("error", object_schema(Vec::new())),
+        (
+            "error",
+            object_schema(vec![
+                ("code", string_schema()),
+                ("message", string_schema()),
+            ]),
+        ),
         ("exitCode", integer_schema()),
-        ("meta", object_schema(Vec::new())),
+        (
+            "meta",
+            object_schema(vec![
+                ("mode", string_schema()),
+                ("runId", string_schema()),
+                ("schemaVersion", string_schema()),
+                ("source", string_schema()),
+                ("fetchedAt", string_schema()),
+                ("staleAfter", string_schema()),
+                ("timestamp", string_schema()),
+                ("version", string_schema()),
+            ]),
+        ),
         ("ok", boolean_schema()),
-        ("target", object_schema(Vec::new())),
-        ("warnings", array_schema(object_schema(Vec::new()))),
+        (
+            "target",
+            object_schema(vec![("kind", string_schema()), ("name", string_schema())]),
+        ),
+        (
+            "warnings",
+            array_schema(object_schema(vec![
+                ("code", string_schema()),
+                ("message", string_schema()),
+            ])),
+        ),
     ]);
     let ndjson_event_schema = object_schema(vec![
         ("action", string_schema()),
         ("data", object_schema(Vec::new())),
-        ("meta", object_schema(Vec::new())),
-        ("target", object_schema(Vec::new())),
+        (
+            "meta",
+            object_schema(vec![
+                ("mode", string_schema()),
+                ("runId", string_schema()),
+                ("schemaVersion", string_schema()),
+                ("source", string_schema()),
+                ("fetchedAt", string_schema()),
+                ("staleAfter", string_schema()),
+                ("timestamp", string_schema()),
+                ("version", string_schema()),
+            ]),
+        ),
+        (
+            "target",
+            object_schema(vec![("kind", string_schema()), ("name", string_schema())]),
+        ),
         ("type", string_schema()),
     ]);
 
@@ -1595,14 +1637,84 @@ fn schema_catalog() -> Vec<SchemaDocument> {
         },
         SchemaDocument {
             data_schema: object_schema(vec![
-                ("agents", array_schema(object_schema(Vec::new()))),
-                ("checks", array_schema(object_schema(Vec::new()))),
-                ("installSource", object_schema(Vec::new())),
-                ("installers", object_schema(Vec::new())),
-                ("issues", array_schema(object_schema(Vec::new()))),
+                (
+                    "agents",
+                    array_schema(object_schema(vec![
+                        ("displayName", string_schema()),
+                        ("installedVersion", string_schema()),
+                        ("latestVersion", string_schema()),
+                        ("lifecycle", string_schema()),
+                        ("outdated", boolean_schema()),
+                        ("sourceLabel", string_schema()),
+                    ])),
+                ),
+                (
+                    "checks",
+                    array_schema(object_schema(vec![
+                        ("name", string_schema()),
+                        ("detail", string_schema()),
+                        ("recoveryHint", string_schema()),
+                        ("status", string_schema()),
+                    ])),
+                ),
+                (
+                    "installSource",
+                    object_schema(vec![
+                        ("kind", string_schema()),
+                        ("confidence", string_schema()),
+                        ("executable", string_schema()),
+                        ("recorded", string_schema()),
+                    ]),
+                ),
+                (
+                    "installers",
+                    object_schema(vec![
+                        ("brew", boolean_schema()),
+                        ("bun", boolean_schema()),
+                        ("npm", boolean_schema()),
+                        ("winget", boolean_schema()),
+                    ]),
+                ),
+                (
+                    "issues",
+                    array_schema(object_schema(vec![
+                        ("blocking", boolean_schema()),
+                        ("category", string_schema()),
+                        ("code", string_schema()),
+                        ("docsRef", string_schema()),
+                        ("message", string_schema()),
+                        ("severity", string_schema()),
+                        (
+                            "subject",
+                            object_schema(vec![
+                                ("kind", string_schema()),
+                                ("name", string_schema()),
+                            ]),
+                        ),
+                        ("suggestedAction", string_schema()),
+                        ("suggestedCommands", array_schema(string_schema())),
+                    ])),
+                ),
                 ("ok", boolean_schema()),
-                ("paths", object_schema(Vec::new())),
-                ("self", object_schema(Vec::new())),
+                (
+                    "paths",
+                    object_schema(vec![
+                        ("configFile", string_schema()),
+                        ("executable", string_schema()),
+                        ("stateFile", string_schema()),
+                    ]),
+                ),
+                (
+                    "self",
+                    object_schema(vec![
+                        ("canAutoUpdate", boolean_schema()),
+                        ("currentVersion", string_schema()),
+                        ("installSource", string_schema()),
+                        ("latestVersion", string_schema()),
+                        ("outdated", boolean_schema()),
+                        ("recoveryHint", string_schema()),
+                    ]),
+                ),
                 ("summary", string_schema()),
             ]),
             description: "AGX runtime diagnostics",
@@ -1619,15 +1731,39 @@ fn schema_catalog() -> Vec<SchemaDocument> {
         },
         SchemaDocument {
             data_schema: object_schema(vec![
-                ("agent", object_schema(Vec::new())),
+                (
+                    "agent",
+                    object_schema(vec![
+                        ("displayName", string_schema()),
+                        ("name", string_schema()),
+                    ]),
+                ),
                 ("args", array_schema(string_schema())),
                 ("binaryPath", string_schema()),
                 ("command", array_schema(string_schema())),
                 ("dryRun", boolean_schema()),
                 ("exitCode", integer_schema()),
+                (
+                    "installGuidance",
+                    object_schema(vec![
+                        ("docsRef", string_schema()),
+                        (
+                            "installMethods",
+                            array_schema(object_schema(vec![
+                                ("command", string_schema()),
+                                ("label", string_schema()),
+                                ("type", string_schema()),
+                            ])),
+                        ),
+                        ("suggestedAction", string_schema()),
+                        ("suggestedEnsureCommand", string_schema()),
+                        ("suggestedExecCommand", string_schema()),
+                    ]),
+                ),
                 ("installPolicy", string_schema()),
                 ("installedAfter", boolean_schema()),
                 ("installedBefore", boolean_schema()),
+                ("message", string_schema()),
                 ("stderr", string_schema()),
                 ("stdout", string_schema()),
             ]),
@@ -1673,8 +1809,53 @@ fn schema_catalog() -> Vec<SchemaDocument> {
         },
         SchemaDocument {
             data_schema: object_schema(vec![
-                ("agent", object_schema(Vec::new())),
-                ("resolution", object_schema(Vec::new())),
+                (
+                    "agent",
+                    object_schema(vec![
+                        ("aliases", array_schema(string_schema())),
+                        ("binaryName", string_schema()),
+                        ("displayName", string_schema()),
+                        ("homepage", string_schema()),
+                        (
+                            "installMethods",
+                            array_schema(object_schema(vec![
+                                ("command", string_schema()),
+                                ("label", string_schema()),
+                                ("type", string_schema()),
+                            ])),
+                        ),
+                        ("name", string_schema()),
+                        ("packageName", string_schema()),
+                        ("selfUpdateCommands", array_schema(string_schema())),
+                    ]),
+                ),
+                (
+                    "resolution",
+                    object_schema(vec![
+                        ("binaryPath", string_schema()),
+                        (
+                            "installGuidance",
+                            object_schema(vec![
+                                ("docsRef", string_schema()),
+                                (
+                                    "installMethods",
+                                    array_schema(object_schema(vec![
+                                        ("command", string_schema()),
+                                        ("label", string_schema()),
+                                        ("type", string_schema()),
+                                    ])),
+                                ),
+                                ("suggestedAction", string_schema()),
+                                ("suggestedEnsureCommand", string_schema()),
+                            ]),
+                        ),
+                        ("installed", boolean_schema()),
+                        ("installSource", string_schema()),
+                        ("lifecycle", string_schema()),
+                        ("sourceLabel", string_schema()),
+                        ("suggestedLaunchCommand", array_schema(string_schema())),
+                    ]),
+                ),
             ]),
             description: "Resolved executable entrypoint for an agent",
             envelope_schema: envelope_schema.clone(),
