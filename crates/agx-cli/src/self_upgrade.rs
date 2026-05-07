@@ -7,7 +7,7 @@ use crate::context::CliContext;
 use crate::errors::{AgxError, AgxErrorCode};
 use crate::state;
 
-const AGX_PACKAGE_NAME: &str = "agxctl";
+const AGX_PACKAGE_NAME: &str = "agx-cli";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

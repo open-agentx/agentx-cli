@@ -27,7 +27,7 @@ const version = versionResult.stdout.trim().split(/\s+/).at(-1);
 const assetName = `agx-${platform}-${arch}${platform === "win32" ? ".exe" : ""}`;
 const manifest = {
   generatedAt: new Date().toISOString(),
-  packageName: "agxctl",
+  packageName: "agx-cli",
   version,
   assets: [
     {

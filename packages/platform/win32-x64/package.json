@@ -1,5 +1,5 @@
 {
-  "name": "agxctl-win32-x64",
+  "name": "agx-cli-win32-x64",
   "version": "0.1.0",
   "description": "AGX native binary for Windows x64",
   "license": "MIT",
