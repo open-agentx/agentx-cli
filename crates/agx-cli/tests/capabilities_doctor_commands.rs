@@ -250,6 +250,111 @@ fn doctor_human_output_shows_bun_recovery_for_outdated_self_install() {
 }
 
 #[test]
+fn doctor_human_output_does_not_flag_self_as_outdated_when_latest_is_lower() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "bun"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["doctor"],
+        &[("AGX_TEST_LATEST_VERSION", "0.0.9")],
+    );
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Latest:       0.0.9"));
+    assert!(!stdout.contains("update available"));
+}
+
+#[test]
+fn doctor_human_output_shows_binary_recovery_for_outdated_standalone_install() {
+    let workspace = TestWorkspace::new();
+    let executable = workspace.install_fake_self_binary();
+    let manifest_path = workspace.root().join("manifest.json");
+    fs::write(
+        &manifest_path,
+        standalone_manifest_json("0.2.0", &standalone_asset_name(), "placeholder"),
+    )
+    .expect("manifest should be written");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "standalone"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["doctor"],
+        &[
+            (
+                "AGX_TEST_SELF_EXECUTABLE_PATH",
+                executable.to_string_lossy().as_ref(),
+            ),
+            (
+                "AGX_TEST_STANDALONE_MANIFEST_PATH",
+                manifest_path.to_string_lossy().as_ref(),
+            ),
+        ],
+    );
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Recovery:"));
+    assert!(stdout.contains("/releases/latest/download/agx-"));
+}
+
+#[test]
+fn doctor_human_output_lists_installed_agents_with_versions() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx(&workspace, &["doctor"]);
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Qoder CLI"));
+    assert!(stdout.contains("0.1.0"));
+    assert!(stdout.contains("managed via bun (@qoder-ai/qodercli)"));
+}
+
+#[test]
+fn doctor_human_output_reports_missing_managed_installers() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx(&workspace, &["doctor"]);
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("No managed installer found"));
+}
+
+#[test]
 fn doctor_human_output_shows_no_agents_installed_when_catalog_is_empty_on_path() {
     let workspace = TestWorkspace::new();
 
@@ -279,4 +384,60 @@ fn doctor_json_reports_self_auto_update_unavailable_for_source_builds() {
         issue["code"] == "SELF_AUTO_UPDATE_UNAVAILABLE"
             && issue["suggestedAction"] == "reinstall-self-with-auto-update-source"
     }));
+}
+
+fn standalone_asset_name() -> String {
+    match std::env::consts::OS {
+        "windows" => match std::env::consts::ARCH {
+            "x86_64" => "agx-win32-x64.exe".to_string(),
+            "aarch64" => "agx-win32-arm64.exe".to_string(),
+            other => format!("agx-win32-{other}.exe"),
+        },
+        "macos" => match std::env::consts::ARCH {
+            "x86_64" => "agx-darwin-x64".to_string(),
+            "aarch64" => "agx-darwin-arm64".to_string(),
+            other => format!("agx-darwin-{other}"),
+        },
+        "linux" => match std::env::consts::ARCH {
+            "x86_64" => "agx-linux-x64".to_string(),
+            "aarch64" => "agx-linux-arm64".to_string(),
+            other => format!("agx-linux-{other}"),
+        },
+        other => panic!("unsupported test platform: {other}"),
+    }
+}
+
+fn standalone_manifest_json(version: &str, asset_name: &str, checksum: &str) -> String {
+    let platform = match std::env::consts::OS {
+        "windows" => "win32",
+        "macos" => "darwin",
+        "linux" => "linux",
+        other => panic!("unsupported test platform: {other}"),
+    };
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        other => panic!("unsupported test arch: {other}"),
+    };
+    format!(
+        concat!(
+            "{{\n",
+            "  \"version\": \"{version}\",\n",
+            "  \"assets\": [\n",
+            "    {{\n",
+            "      \"name\": \"{asset_name}\",\n",
+            "      \"os\": \"{platform}\",\n",
+            "      \"arch\": \"{arch}\",\n",
+            "      \"sha256\": \"{checksum}\",\n",
+            "      \"downloadUrl\": \"https://github.com/Drswith/agents-cli/releases/latest/download/{asset_name}\"\n",
+            "    }}\n",
+            "  ]\n",
+            "}}\n"
+        ),
+        version = version,
+        asset_name = asset_name,
+        platform = platform,
+        arch = arch,
+        checksum = checksum,
+    )
 }
