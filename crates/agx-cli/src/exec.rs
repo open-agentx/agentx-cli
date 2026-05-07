@@ -12,6 +12,12 @@ use crate::{inspection, package_manager};
 #[serde(rename_all = "camelCase")]
 pub struct ExecResult {
     pub agent: ExecAgent,
+    pub execution: ExecExecution,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecExecution {
     pub args: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub binary_path: Option<String>,
@@ -71,26 +77,28 @@ pub fn execute_agent(
         let command = build_display_command(agent.binary_name, args);
         return Ok(ExecResult {
             agent: exec_agent(agent),
-            args: args.to_vec(),
-            binary_path: inspection::find_binary_in_path(agent.binary_name)
-                .map(|path| path.to_string_lossy().into_owned()),
-            command,
-            dry_run: true,
-            exit_code: None,
-            install_policy: install_policy_label(install_policy),
-            install_guidance: (!installed_before).then(|| install_guidance(agent, args)),
-            installed_after: installed_before,
-            installed_before,
-            message: Some(if needs_install {
-                format!(
-                    "Dry run: would ensure {} is installed, then execute it.",
-                    agent.display_name
-                )
-            } else {
-                format!("Dry run: would execute {}.", agent.display_name)
-            }),
-            stderr: None,
-            stdout: None,
+            execution: ExecExecution {
+                args: args.to_vec(),
+                binary_path: inspection::find_binary_in_path(agent.binary_name)
+                    .map(|path| path.to_string_lossy().into_owned()),
+                command,
+                dry_run: true,
+                exit_code: None,
+                install_policy: install_policy_label(install_policy),
+                install_guidance: (!installed_before).then(|| install_guidance(agent, args)),
+                installed_after: installed_before,
+                installed_before,
+                message: Some(if needs_install {
+                    format!(
+                        "Dry run: would ensure {} is installed, then execute it.",
+                        agent.display_name
+                    )
+                } else {
+                    format!("Dry run: would execute {}.", agent.display_name)
+                }),
+                stderr: None,
+                stdout: None,
+            },
         });
     }
 
@@ -114,18 +122,20 @@ pub fn execute_agent(
     let output = run_agent_command(&binary_path, args, context.timeout_ms)?;
     Ok(ExecResult {
         agent: exec_agent(agent),
-        args: args.to_vec(),
-        binary_path: Some(binary_path.to_string_lossy().into_owned()),
-        command,
-        dry_run: false,
-        exit_code: Some(output.exit_code),
-        install_policy: install_policy_label(install_policy),
-        install_guidance: None,
-        installed_after: true,
-        installed_before,
-        message: None,
-        stderr: non_empty_output(output.stderr),
-        stdout: non_empty_output(output.stdout),
+        execution: ExecExecution {
+            args: args.to_vec(),
+            binary_path: Some(binary_path.to_string_lossy().into_owned()),
+            command,
+            dry_run: false,
+            exit_code: Some(output.exit_code),
+            install_policy: install_policy_label(install_policy),
+            install_guidance: None,
+            installed_after: true,
+            installed_before,
+            message: None,
+            stderr: non_empty_output(output.stderr),
+            stdout: non_empty_output(output.stdout),
+        },
     })
 }
 

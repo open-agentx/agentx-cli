@@ -291,6 +291,13 @@ struct InstallMethodInfo {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct ExecCommandData {
+    agent: exec::ExecAgent,
+    execution: exec::ExecExecution,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 #[allow(clippy::struct_excessive_bools)]
 struct FeatureCapabilities {
     assume_yes: bool,
@@ -548,7 +555,7 @@ fn exec_command(
 
     match exec::execute_agent(agent, args, install_policy, context) {
         Ok(result) => {
-            let exit_code = result.exit_code.unwrap_or(0);
+            let exit_code = result.execution.exit_code.unwrap_or(0);
             CommandResult::success_with_exit_code(
                 "exec",
                 result,
@@ -1755,34 +1762,7 @@ fn schema_catalog() -> Vec<SchemaDocument> {
                         ("name", string_schema()),
                     ]),
                 ),
-                ("args", array_schema(string_schema())),
-                ("binaryPath", string_schema()),
-                ("command", array_schema(string_schema())),
-                ("dryRun", boolean_schema()),
-                ("exitCode", integer_schema()),
-                (
-                    "installGuidance",
-                    object_schema(vec![
-                        ("docsRef", string_schema()),
-                        (
-                            "installMethods",
-                            array_schema(object_schema(vec![
-                                ("command", string_schema()),
-                                ("label", string_schema()),
-                                ("type", string_schema()),
-                            ])),
-                        ),
-                        ("suggestedAction", string_schema()),
-                        ("suggestedEnsureCommand", string_schema()),
-                        ("suggestedExecCommand", string_schema()),
-                    ]),
-                ),
-                ("installPolicy", string_schema()),
-                ("installedAfter", boolean_schema()),
-                ("installedBefore", boolean_schema()),
-                ("message", string_schema()),
-                ("stderr", string_schema()),
-                ("stdout", string_schema()),
+                ("execution", exec_execution_schema()),
             ]),
             description: "Agent execution result",
             envelope_schema: envelope_schema.clone(),
@@ -2059,6 +2039,33 @@ fn resolution_schema() -> JsonSchema {
     ])
 }
 
+fn exec_install_guidance_schema() -> JsonSchema {
+    object_schema(vec![
+        ("docsRef", string_schema()),
+        ("installMethods", array_schema(install_method_schema())),
+        ("suggestedAction", string_schema()),
+        ("suggestedEnsureCommand", string_schema()),
+        ("suggestedExecCommand", string_schema()),
+    ])
+}
+
+fn exec_execution_schema() -> JsonSchema {
+    object_schema(vec![
+        ("args", array_schema(string_schema())),
+        ("binaryPath", string_schema()),
+        ("command", array_schema(string_schema())),
+        ("dryRun", boolean_schema()),
+        ("exitCode", integer_schema()),
+        ("installGuidance", exec_install_guidance_schema()),
+        ("installPolicy", string_schema()),
+        ("installedAfter", boolean_schema()),
+        ("installedBefore", boolean_schema()),
+        ("message", string_schema()),
+        ("stderr", string_schema()),
+        ("stdout", string_schema()),
+    ])
+}
+
 fn lifecycle_agent_schema() -> JsonSchema {
     object_schema(vec![
         ("displayName", string_schema()),
@@ -2285,29 +2292,31 @@ fn exec_missing_result(
 ) -> CommandResult {
     CommandResult::error_with_data(
         "exec",
-        exec::ExecResult {
+        ExecCommandData {
             agent: exec::ExecAgent {
                 display_name: agent.display_name,
                 name: agent.name,
             },
-            args: args.to_vec(),
-            binary_path: None,
-            command: std::iter::once(agent.binary_name.to_string())
-                .chain(args.iter().cloned())
-                .collect(),
-            dry_run: false,
-            exit_code: None,
-            install_policy: match install_policy {
-                crate::cli::InstallPolicyArg::Never => "never",
-                crate::cli::InstallPolicyArg::IfMissing => "if-missing",
-                crate::cli::InstallPolicyArg::Always => "always",
+            execution: exec::ExecExecution {
+                args: args.to_vec(),
+                binary_path: None,
+                command: std::iter::once(agent.binary_name.to_string())
+                    .chain(args.iter().cloned())
+                    .collect(),
+                dry_run: false,
+                exit_code: None,
+                install_policy: match install_policy {
+                    crate::cli::InstallPolicyArg::Never => "never",
+                    crate::cli::InstallPolicyArg::IfMissing => "if-missing",
+                    crate::cli::InstallPolicyArg::Always => "always",
+                },
+                install_guidance: Some(exec::install_guidance(agent, args)),
+                installed_after: false,
+                installed_before: false,
+                message: Some(message.clone()),
+                stderr: None,
+                stdout: None,
             },
-            install_guidance: Some(exec::install_guidance(agent, args)),
-            installed_after: false,
-            installed_before: false,
-            message: Some(message.clone()),
-            stderr: None,
-            stdout: None,
         },
         AgxError::new(error_code, message),
         CommandTarget::agent(agent.name),

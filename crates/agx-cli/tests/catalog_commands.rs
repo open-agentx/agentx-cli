@@ -247,7 +247,14 @@ fn schema_exec_and_resolve_include_install_guidance_fields() {
     let exec_properties = exec_json["data"]["commands"][0]["dataSchema"]["properties"]
         .as_array()
         .expect("exec properties should be an array");
-    let install_guidance = exec_properties
+    let execution = exec_properties
+        .iter()
+        .find(|item| item["name"] == "execution")
+        .expect("exec execution should exist");
+    let execution_properties = execution["schema"]["properties"]
+        .as_array()
+        .expect("execution properties should be an array");
+    let install_guidance = execution_properties
         .iter()
         .find(|item| item["name"] == "installGuidance")
         .expect("exec installGuidance should exist");
@@ -258,6 +265,11 @@ fn schema_exec_and_resolve_include_install_guidance_fields() {
         exec_guidance_properties
             .iter()
             .any(|item| item["name"] == "suggestedExecCommand")
+    );
+    assert!(
+        execution_properties
+            .iter()
+            .any(|item| item["name"] == "installPolicy")
     );
     assert!(
         exec_guidance_properties

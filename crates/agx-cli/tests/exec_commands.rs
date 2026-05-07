@@ -24,10 +24,10 @@ fn explicit_exec_returns_structured_process_result() {
     let json = stdout_json(&output);
     assert_eq!(json["action"], "exec");
     assert_eq!(json["data"]["agent"]["name"], "qoder");
-    assert_eq!(json["data"]["installPolicy"], "never");
-    assert_eq!(json["data"]["exitCode"], 0);
+    assert_eq!(json["data"]["execution"]["installPolicy"], "never");
+    assert_eq!(json["data"]["execution"]["exitCode"], 0);
     assert!(
-        json["data"]["stdout"]
+        json["data"]["execution"]["stdout"]
             .as_str()
             .expect("stdout should be a string")
             .contains("agx 0.1.0")
@@ -65,13 +65,13 @@ fn exec_dry_run_reports_install_and_command_when_missing() {
 
     assert!(output.status.success());
     let json = stdout_json(&output);
-    assert_eq!(json["data"]["dryRun"], true);
-    assert_eq!(json["data"]["installPolicy"], "if-missing");
-    assert_eq!(json["data"]["installedBefore"], false);
-    assert_eq!(json["data"]["installedAfter"], false);
-    assert_eq!(json["data"]["command"][0], "qodercli");
+    assert_eq!(json["data"]["execution"]["dryRun"], true);
+    assert_eq!(json["data"]["execution"]["installPolicy"], "if-missing");
+    assert_eq!(json["data"]["execution"]["installedBefore"], false);
+    assert_eq!(json["data"]["execution"]["installedAfter"], false);
+    assert_eq!(json["data"]["execution"]["command"][0], "qodercli");
     assert!(
-        json["data"]["message"]
+        json["data"]["execution"]["message"]
             .as_str()
             .expect("message should be a string")
             .contains("would ensure Qoder CLI is installed")
@@ -98,10 +98,10 @@ fn exec_always_policy_runs_when_binary_is_already_present() {
 
     assert!(output.status.success());
     let json = stdout_json(&output);
-    assert_eq!(json["data"]["installPolicy"], "always");
-    assert_eq!(json["data"]["installedBefore"], true);
-    assert_eq!(json["data"]["installedAfter"], true);
-    assert_eq!(json["data"]["exitCode"], 0);
+    assert_eq!(json["data"]["execution"]["installPolicy"], "always");
+    assert_eq!(json["data"]["execution"]["installedBefore"], true);
+    assert_eq!(json["data"]["execution"]["installedAfter"], true);
+    assert_eq!(json["data"]["execution"]["exitCode"], 0);
 }
 
 #[test]
@@ -147,11 +147,11 @@ fn exec_without_install_policy_returns_manual_action_required_when_missing() {
             .contains("agx ensure jcode")
     );
     assert_eq!(
-        json["data"]["installGuidance"]["suggestedEnsureCommand"],
+        json["data"]["execution"]["installGuidance"]["suggestedEnsureCommand"],
         "agx ensure jcode"
     );
     assert_eq!(
-        json["data"]["installGuidance"]["suggestedExecCommand"],
+        json["data"]["execution"]["installGuidance"]["suggestedExecCommand"],
         "agx exec jcode --install if-missing -- --version"
     );
 }
@@ -175,7 +175,7 @@ fn exec_install_policy_alias_is_still_accepted() {
 
     assert!(output.status.success());
     let json = stdout_json(&output);
-    assert_eq!(json["data"]["installPolicy"], "if-missing");
+    assert_eq!(json["data"]["execution"]["installPolicy"], "if-missing");
 }
 
 #[test]

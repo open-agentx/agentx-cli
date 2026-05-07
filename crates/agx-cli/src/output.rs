@@ -1051,10 +1051,14 @@ fn render_exec(result: &CommandResult) {
     if let Some(error) = &result.error {
         eprintln!("{}", error.message);
         if let Some(data) = &result.data {
-            if let Some(ensure) = data["installGuidance"]["suggestedEnsureCommand"].as_str() {
+            if let Some(ensure) =
+                data["execution"]["installGuidance"]["suggestedEnsureCommand"].as_str()
+            {
                 eprintln!("Try: {ensure}");
             }
-            if let Some(exec) = data["installGuidance"]["suggestedExecCommand"].as_str() {
+            if let Some(exec) =
+                data["execution"]["installGuidance"]["suggestedExecCommand"].as_str()
+            {
                 eprintln!("Or:  {exec}");
             }
         }
@@ -1062,14 +1066,14 @@ fn render_exec(result: &CommandResult) {
     }
 
     if let Some(data) = &result.data {
-        if let Some(stdout) = data["stdout"].as_str() {
+        if let Some(stdout) = data["execution"]["stdout"].as_str() {
             print!("{stdout}");
         }
-        if let Some(stderr) = data["stderr"].as_str() {
+        if let Some(stderr) = data["execution"]["stderr"].as_str() {
             eprint!("{stderr}");
         }
-        if data["dryRun"].as_bool().unwrap_or(false)
-            && let Some(message) = data["message"].as_str()
+        if data["execution"]["dryRun"].as_bool().unwrap_or(false)
+            && let Some(message) = data["execution"]["message"].as_str()
         {
             println!("{message}");
         }
