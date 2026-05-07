@@ -144,10 +144,14 @@ struct ListedAgent {
     binary_name: &'static str,
     display_name: &'static str,
     installed: bool,
-    lifecycle: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    installed_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_version: Option<String>,
+    lifecycle: String,
     name: &'static str,
-    source_label: &'static str,
-    update_label: &'static str,
+    source_label: String,
+    update_label: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -190,6 +194,7 @@ struct AgentInfo {
     binary_name: &'static str,
     display_name: &'static str,
     homepage: &'static str,
+    install_methods: Vec<InstallMethodInfo>,
     name: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     package_name: Option<&'static str>,
@@ -206,7 +211,12 @@ struct InspectData {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(clippy::struct_excessive_bools)]
 struct AgentCapabilities {
+    can_auto_install: bool,
+    can_auto_uninstall: bool,
+    can_run: bool,
+    can_self_update: bool,
     install_methods: Vec<InstallMethodInfo>,
     self_update_commands: Vec<&'static str>,
 }
@@ -227,8 +237,8 @@ struct Resolution {
     install_guidance: Option<InstallGuidance>,
     installed: bool,
     install_source: &'static str,
-    lifecycle: &'static str,
-    source_label: &'static str,
+    lifecycle: String,
+    source_label: String,
     suggested_launch_command: Vec<String>,
 }
 
@@ -463,14 +473,19 @@ fn list_command(context: &CliContext) -> CommandResult {
         ListData {
             agents: agents::all_agents()
                 .iter()
-                .map(|agent| ListedAgent {
-                    binary_name: agent.binary_name,
-                    display_name: agent.display_name,
-                    installed: inspection::find_binary_in_path(agent.binary_name).is_some(),
-                    lifecycle: "unmanaged",
-                    name: agent.name,
-                    source_label: "untracked",
-                    update_label: "manual",
+                .map(|agent| {
+                    let inspection = resolved_agent_inspection(*agent);
+                    ListedAgent {
+                        binary_name: agent.binary_name,
+                        display_name: agent.display_name,
+                        installed: inspection.installed,
+                        installed_version: inspection.installed_version,
+                        latest_version: inspection.latest_version,
+                        lifecycle: inspection.lifecycle,
+                        name: agent.name,
+                        source_label: inspection.source_label,
+                        update_label: inspection.update_label,
+                    }
                 })
                 .collect(),
         },
@@ -616,22 +631,14 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
 
 fn info_command(agent_name: &str, context: &CliContext) -> CommandResult {
     let Some(agent) = agents::resolve_agent(agent_name) else {
-        return CommandResult::error(
-            "info",
-            AgxError::new(
-                AgxErrorCode::AgentNotFound,
-                format!("Unknown agent: {agent_name}"),
-            ),
-            CommandTarget::agent(agent_name),
-            context,
-        );
+        return agent_not_found_result("info", agent_name, context);
     };
 
     CommandResult::success(
         "info",
         InfoData {
             agent: agent_info(agent),
-            inspection: inspection::inspect_agent(agent),
+            inspection: resolved_agent_inspection(agent),
         },
         CommandTarget::agent(agent.name),
         context,
@@ -647,11 +654,8 @@ fn inspect_command(agent_name: &str, context: &CliContext) -> CommandResult {
         "inspect",
         InspectData {
             agent: agent_info(agent),
-            capabilities: AgentCapabilities {
-                install_methods: install_methods(agent),
-                self_update_commands: self_update_commands(agent),
-            },
-            inspection: inspection::inspect_agent(agent),
+            capabilities: agent_capabilities(agent),
+            inspection: resolved_agent_inspection(agent),
         },
         CommandTarget::agent(agent.name),
         context,
@@ -663,37 +667,49 @@ fn resolve_command(agent_name: &str, context: &CliContext) -> CommandResult {
         return agent_not_found_result("resolve", agent_name, context);
     };
 
-    let inspection = inspection::inspect_agent(agent);
+    let inspection = resolved_agent_inspection(agent);
     let install_methods = install_methods(agent);
     let installed = inspection.installed;
-    let install_guidance = if installed {
-        None
-    } else {
-        Some(InstallGuidance {
+    let suggested_launch_command = inspection.binary_path.as_ref().map_or_else(
+        || vec![agent.binary_name.to_string()],
+        |binary_path| vec![binary_path.clone()],
+    );
+    let resolution = Resolution {
+        binary_path: inspection.binary_path.clone(),
+        install_guidance: (!installed).then_some(InstallGuidance {
             docs_ref: "openspec/changes/rewrite-quantex-cli-as-agx-rust/tasks.md",
             install_methods,
             suggested_action: "ensure-agent-installed",
             suggested_ensure_command: format!("agx ensure {}", agent.name),
-        })
+        }),
+        installed,
+        install_source: install_source_for(agent),
+        lifecycle: inspection.lifecycle,
+        source_label: inspection.source_label,
+        suggested_launch_command,
+    };
+    let data = ResolveData {
+        agent: agent_info(agent),
+        resolution,
     };
 
-    CommandResult::success(
-        "resolve",
-        ResolveData {
-            agent: agent_info(agent),
-            resolution: Resolution {
-                binary_path: inspection.binary_path,
-                install_guidance,
-                installed,
-                install_source: "untracked",
-                lifecycle: "unmanaged",
-                source_label: "untracked",
-                suggested_launch_command: vec![agent.binary_name.to_string()],
-            },
-        },
-        CommandTarget::agent(agent.name),
-        context,
-    )
+    if installed {
+        CommandResult::success("resolve", data, CommandTarget::agent(agent.name), context)
+    } else {
+        CommandResult::error_with_data(
+            "resolve",
+            data,
+            AgxError::new(
+                AgxErrorCode::AgentNotInstalled,
+                format!(
+                    "{} is not installed. Run `agx ensure {}` first.",
+                    agent.display_name, agent.name
+                ),
+            ),
+            CommandTarget::agent(agent.name),
+            context,
+        )
+    }
 }
 
 fn schema_command(command_name: Option<&str>, context: &CliContext) -> CommandResult {
@@ -1248,10 +1264,37 @@ fn agent_info(agent: AgentDefinition) -> AgentInfo {
         binary_name: agent.binary_name,
         display_name: agent.display_name,
         homepage: agent.homepage,
+        install_methods: install_methods(agent),
         name: agent.name,
         package_name: agent.npm_package,
         self_update_commands: self_update_commands(agent),
     }
+}
+
+fn agent_capabilities(agent: AgentDefinition) -> AgentCapabilities {
+    let inspection = resolved_agent_inspection(agent);
+    let self_update_commands = self_update_commands(agent);
+    let can_self_update = !self_update_commands.is_empty();
+
+    AgentCapabilities {
+        can_auto_install: agent.npm_package.is_some(),
+        can_auto_uninstall: inspection.installed && inspection.lifecycle == "managed",
+        can_run: inspection.installed,
+        can_self_update,
+        install_methods: install_methods(agent),
+        self_update_commands,
+    }
+}
+
+fn resolved_agent_inspection(agent: AgentDefinition) -> inspection::AgentInspection {
+    let mut inspection = inspection::inspect_agent(agent);
+    let installed_state = crate::state::get_installed_agent_state(agent.name);
+
+    inspection.lifecycle = lifecycle_for(installed_state.as_ref()).to_string();
+    inspection.source_label = source_label_for(installed_state.as_ref(), inspection.installed);
+    inspection.update_label = update_label_for(agent, installed_state.as_ref());
+
+    inspection
 }
 
 fn install_methods(agent: AgentDefinition) -> Vec<InstallMethodInfo> {
@@ -1292,6 +1335,88 @@ fn self_update_commands(agent: AgentDefinition) -> Vec<&'static str> {
         "pi" => vec!["pi update"],
         "qoder" => vec!["qodercli update"],
         _ => Vec::new(),
+    }
+}
+
+fn lifecycle_for(installed_state: Option<&crate::state::InstalledAgentState>) -> &'static str {
+    if installed_state.is_some_and(|state| is_managed_install_type(&state.install_type)) {
+        "managed"
+    } else {
+        "unmanaged"
+    }
+}
+
+fn install_source_for(agent: AgentDefinition) -> &'static str {
+    crate::state::get_installed_agent_state(agent.name)
+        .map_or("path", |state| install_source_kind(&state.install_type))
+}
+
+fn install_source_kind(install_type: &str) -> &'static str {
+    match install_type {
+        "bun" => "bun",
+        "npm" => "npm",
+        "brew" => "brew",
+        "winget" => "winget",
+        "script" => "script",
+        "binary" => "binary",
+        _ => "path",
+    }
+}
+
+fn source_label_for(
+    installed_state: Option<&crate::state::InstalledAgentState>,
+    installed: bool,
+) -> String {
+    if let Some(state) = installed_state {
+        return if is_managed_install_type(&state.install_type) {
+            format!(
+                "managed via {}{}",
+                state.install_type,
+                format_package_target(
+                    state.package_name.as_deref(),
+                    state.package_target_kind.as_deref()
+                )
+            )
+        } else if state.install_type == "script" {
+            "script installer".to_string()
+        } else {
+            "binary installer".to_string()
+        };
+    }
+
+    if installed {
+        "detected in PATH".to_string()
+    } else {
+        "untracked".to_string()
+    }
+}
+
+fn update_label_for(
+    agent: AgentDefinition,
+    installed_state: Option<&crate::state::InstalledAgentState>,
+) -> String {
+    if installed_state.is_some_and(|state| is_managed_install_type(&state.install_type)) {
+        "managed update".to_string()
+    } else if !self_update_commands(agent).is_empty() {
+        "command update".to_string()
+    } else {
+        "manual update".to_string()
+    }
+}
+
+fn is_managed_install_type(install_type: &str) -> bool {
+    matches!(install_type, "bun" | "npm" | "brew" | "winget")
+}
+
+fn format_package_target(package_name: Option<&str>, package_target_kind: Option<&str>) -> String {
+    let Some(package_name) = package_name else {
+        return String::new();
+    };
+
+    match package_target_kind {
+        Some("cask") => format!(" ({package_name} cask)"),
+        Some("id") => format!(" ({package_name} id)"),
+        _ => format!(" ({package_name})"),
     }
 }
 

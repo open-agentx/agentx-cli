@@ -148,6 +148,29 @@ impl CommandResult {
         }
     }
 
+    pub fn error_with_data(
+        action: impl Into<String>,
+        data: impl Serialize,
+        error: AgxError,
+        target: CommandTarget,
+        context: &CliContext,
+    ) -> Self {
+        let exit_code = error.exit_code();
+        Self {
+            action: action.into(),
+            data: Some(serde_json::to_value(data).expect("command data must serialize")),
+            error: Some(CommandError {
+                code: error.code,
+                message: error.message,
+            }),
+            exit_code: Some(exit_code),
+            meta: create_meta(context),
+            ok: false,
+            target: Some(target),
+            warnings: Vec::new(),
+        }
+    }
+
     pub fn exit_code(&self) -> u8 {
         self.exit_code.unwrap_or_else(|| {
             if self.ok {
@@ -217,11 +240,6 @@ fn create_ndjson_event<'a>(result: &'a CommandResult, context: &CliContext) -> i
 }
 
 fn render_human(result: &CommandResult) {
-    if let Some(error) = &result.error {
-        eprintln!("{}", error.message);
-        return;
-    }
-
     match result.action.as_str() {
         "commands" => {
             println!("AGX Commands\n\nRun `agx commands --json` for the stable command catalog.");
@@ -237,8 +255,14 @@ fn render_human(result: &CommandResult) {
                 render_doctor(data);
             }
         }
+        "list" => render_list(result),
+        "info" => render_info(result),
+        "inspect" => render_inspect(result),
+        "resolve" => render_resolve(result),
         _ => {
-            if let Some(data) = &result.data {
+            if let Some(error) = &result.error {
+                eprintln!("{}", error.message);
+            } else if let Some(data) = &result.data {
                 println!("{data}");
             }
         }
@@ -377,4 +401,286 @@ fn render_doctor(data: &Value) {
     }
 
     println!();
+}
+
+fn render_list(result: &CommandResult) {
+    println!("AI Agents:\n");
+    if let Some(agents) = result
+        .data
+        .as_ref()
+        .and_then(|data| data["agents"].as_array())
+    {
+        for agent in agents {
+            let status = if agent["installed"].as_bool().unwrap_or(false) {
+                "installed"
+            } else {
+                "not installed"
+            };
+            let version = agent["installedVersion"].as_str().unwrap_or("");
+            let update = agent["updateLabel"].as_str().unwrap_or("");
+            let source = agent["sourceLabel"].as_str().unwrap_or("");
+            println!(
+                "  {}: {}{}{}{}",
+                agent["displayName"].as_str().unwrap_or("unknown"),
+                status,
+                if version.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({version})")
+                },
+                if update.is_empty() {
+                    String::new()
+                } else {
+                    format!(" [{update}]")
+                },
+                if source.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {source}")
+                }
+            );
+        }
+    }
+    println!();
+}
+
+fn render_info(result: &CommandResult) {
+    if let Some(error) = &result.error {
+        println!("{}", error.message);
+        return;
+    }
+    let Some(data) = &result.data else {
+        return;
+    };
+
+    println!(
+        "{}\n",
+        data["agent"]["displayName"].as_str().unwrap_or("Agent")
+    );
+    println!(
+        "  Name:         {}",
+        data["agent"]["name"].as_str().unwrap_or("-")
+    );
+    println!(
+        "  Aliases:      {}",
+        data["agent"]["aliases"]
+            .as_array()
+            .map(|aliases| {
+                aliases
+                    .iter()
+                    .filter_map(|alias| alias.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .filter(|aliases| !aliases.is_empty())
+            .unwrap_or_else(|| "-".to_string())
+    );
+    println!(
+        "  Package:      {}",
+        data["agent"]["packageName"].as_str().unwrap_or("-")
+    );
+    println!(
+        "  Binary:       {}",
+        data["agent"]["binaryName"].as_str().unwrap_or("-")
+    );
+    println!(
+        "  Update:       {}",
+        data["agent"]["selfUpdateCommands"]
+            .as_array()
+            .map(|commands| {
+                commands
+                    .iter()
+                    .filter_map(|command| command.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" || ")
+            })
+            .filter(|commands| !commands.is_empty())
+            .unwrap_or_else(|| "-".to_string())
+    );
+    println!(
+        "  Installed:    {}",
+        if data["inspection"]["installed"].as_bool().unwrap_or(false) {
+            "Yes"
+        } else {
+            "No"
+        }
+    );
+    if let Some(source) = data["inspection"]["sourceLabel"].as_str() {
+        println!("  Source:       {source}");
+    }
+    if let Some(lifecycle) = data["inspection"]["lifecycle"].as_str() {
+        println!("  Lifecycle:    {lifecycle}");
+    }
+    if let Some(version) = data["inspection"]["installedVersion"].as_str() {
+        println!("  Version:      {version}");
+    }
+    if let Some(latest) = data["inspection"]["latestVersion"].as_str() {
+        println!("  Latest:       {latest}");
+    }
+    if let Some(path) = data["inspection"]["binaryPath"].as_str() {
+        println!("  Path:         {path}");
+    }
+    println!("\n  Install Methods:");
+    if let Some(methods) = data["agent"]["installMethods"].as_array() {
+        for method in methods {
+            println!(
+                "    [{}] {}",
+                method["label"].as_str().unwrap_or("unknown"),
+                method["command"].as_str().unwrap_or("")
+            );
+        }
+    }
+    println!();
+}
+
+fn render_inspect(result: &CommandResult) {
+    if let Some(error) = &result.error {
+        println!("{}", error.message);
+        return;
+    }
+    let Some(data) = &result.data else {
+        return;
+    };
+
+    println!(
+        "{}\n",
+        data["agent"]["displayName"].as_str().unwrap_or("Agent")
+    );
+    println!(
+        "  Name:         {}",
+        data["agent"]["name"].as_str().unwrap_or("-")
+    );
+    println!(
+        "  Aliases:      {}",
+        data["agent"]["aliases"]
+            .as_array()
+            .map(|aliases| {
+                aliases
+                    .iter()
+                    .filter_map(|alias| alias.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .filter(|aliases| !aliases.is_empty())
+            .unwrap_or_else(|| "-".to_string())
+    );
+    println!(
+        "  Package:      {}",
+        data["agent"]["packageName"].as_str().unwrap_or("-")
+    );
+    println!(
+        "  Binary:       {}",
+        data["agent"]["binaryName"].as_str().unwrap_or("-")
+    );
+    println!(
+        "  Installed:    {}",
+        if data["inspection"]["installed"].as_bool().unwrap_or(false) {
+            "Yes"
+        } else {
+            "No"
+        }
+    );
+    println!(
+        "  Update Mode:  {}",
+        data["inspection"]["updateLabel"].as_str().unwrap_or("-")
+    );
+    println!(
+        "  Self Update:  {}",
+        data["agent"]["selfUpdateCommands"]
+            .as_array()
+            .map(|commands| {
+                commands
+                    .iter()
+                    .filter_map(|command| command.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" || ")
+            })
+            .filter(|commands| !commands.is_empty())
+            .unwrap_or_else(|| "-".to_string())
+    );
+    if let Some(source) = data["inspection"]["sourceLabel"].as_str() {
+        println!("  Source:       {source}");
+    }
+    if let Some(version) = data["inspection"]["installedVersion"].as_str() {
+        println!("  Version:      {version}");
+    }
+    if let Some(path) = data["inspection"]["binaryPath"].as_str() {
+        println!("  Path:         {path}");
+    }
+    println!("\n  Capabilities:");
+    println!(
+        "    auto-install:   {}",
+        yes_no(data["capabilities"]["canAutoInstall"].as_bool())
+    );
+    println!(
+        "    self-update:    {}",
+        yes_no(data["capabilities"]["canSelfUpdate"].as_bool())
+    );
+    println!(
+        "    auto-uninstall: {}",
+        yes_no(data["capabilities"]["canAutoUninstall"].as_bool())
+    );
+    println!(
+        "    runnable:       {}",
+        yes_no(data["capabilities"]["canRun"].as_bool())
+    );
+    println!("\n  Install Methods:");
+    if let Some(methods) = data["agent"]["installMethods"].as_array() {
+        for method in methods {
+            println!(
+                "    [{}] {}",
+                method["label"].as_str().unwrap_or("unknown"),
+                method["command"].as_str().unwrap_or("")
+            );
+        }
+    }
+    println!();
+}
+
+fn render_resolve(result: &CommandResult) {
+    let Some(data) = &result.data else {
+        if let Some(error) = &result.error {
+            println!("{}", error.message);
+        }
+        return;
+    };
+
+    if let Some(error) = &result.error {
+        println!("{}", error.message);
+    }
+    if !data["resolution"]["installed"].as_bool().unwrap_or(false) {
+        if let Some(ensure) =
+            data["resolution"]["installGuidance"]["suggestedEnsureCommand"].as_str()
+        {
+            println!("{ensure}");
+        }
+        return;
+    }
+
+    println!(
+        "{}\n",
+        data["agent"]["displayName"].as_str().unwrap_or("Agent")
+    );
+    if let Some(path) = data["resolution"]["binaryPath"].as_str() {
+        println!("  Path:          {path}");
+    }
+    if let Some(install_type) = data["resolution"]["installSource"].as_str() {
+        println!("  Install Type:  {install_type}");
+    }
+    if let Some(source) = data["resolution"]["sourceLabel"].as_str() {
+        println!("  Source:        {source}");
+    }
+    if let Some(launch) = data["resolution"]["suggestedLaunchCommand"].as_array() {
+        let launch = launch
+            .iter()
+            .filter_map(|part| part.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        println!("  Launch:        {launch}");
+    }
+    println!();
+}
+
+fn yes_no(value: Option<bool>) -> &'static str {
+    if value.unwrap_or(false) { "yes" } else { "no" }
 }

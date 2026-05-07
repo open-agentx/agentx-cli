@@ -13,9 +13,9 @@ pub struct AgentInspection {
     pub installed_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latest_version: Option<String>,
-    pub lifecycle: &'static str,
-    pub source_label: &'static str,
-    pub update_label: &'static str,
+    pub lifecycle: String,
+    pub source_label: String,
+    pub update_label: String,
 }
 
 pub fn inspect_agent(agent: AgentDefinition) -> AgentInspection {
@@ -28,9 +28,9 @@ pub fn inspect_agent(agent: AgentDefinition) -> AgentInspection {
         installed,
         installed_version,
         latest_version: None,
-        lifecycle: "unmanaged",
-        source_label: "untracked",
-        update_label: "manual",
+        lifecycle: "unmanaged".to_string(),
+        source_label: "untracked".to_string(),
+        update_label: "manual".to_string(),
     }
 }
 

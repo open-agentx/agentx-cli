@@ -6,6 +6,20 @@ use support::{TestWorkspace, run_agx, stdout_json};
 fn list_marks_installed_agents_when_binary_is_present() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
 
     let output = run_agx(&workspace, &["--json", "list"]);
 
@@ -21,6 +35,10 @@ fn list_marks_installed_agents_when_binary_is_present() {
 
     assert_eq!(qoder["installed"], true);
     assert_eq!(qoder["binaryName"], "qodercli");
+    assert_eq!(qoder["installedVersion"], "0.1.0");
+    assert_eq!(qoder["lifecycle"], "managed");
+    assert_eq!(qoder["sourceLabel"], "managed via bun (@qoder-ai/qodercli)");
+    assert_eq!(qoder["updateLabel"], "managed update");
 }
 
 #[test]
@@ -40,7 +58,7 @@ fn list_marks_missing_agents_as_uninstalled() {
 
     assert_eq!(qoder["installed"], false);
     assert_eq!(qoder["sourceLabel"], "untracked");
-    assert_eq!(qoder["updateLabel"], "manual");
+    assert_eq!(qoder["updateLabel"], "command update");
 }
 
 #[test]
@@ -85,6 +103,8 @@ fn inspect_exposes_install_methods_and_self_update_metadata() {
 
     assert!(commands.contains(&"bun add -g @anthropic-ai/claude-code"));
     assert!(commands.contains(&"npm install -g @anthropic-ai/claude-code"));
+    assert_eq!(json["data"]["capabilities"]["canAutoInstall"], true);
+    assert_eq!(json["data"]["capabilities"]["canRun"], false);
     assert_eq!(
         json["data"]["capabilities"]["selfUpdateCommands"][0],
         "claude update"
@@ -123,8 +143,9 @@ fn resolve_returns_install_guidance_for_missing_binary() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "resolve", "qoder"]);
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(4));
     let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "AGENT_NOT_INSTALLED");
     assert_eq!(json["data"]["resolution"]["installed"], false);
     assert_eq!(
         json["data"]["resolution"]["installGuidance"]["suggestedEnsureCommand"],
@@ -147,8 +168,9 @@ fn resolve_manual_only_agent_returns_empty_install_methods() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "resolve", "jcode"]);
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(4));
     let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "AGENT_NOT_INSTALLED");
     assert_eq!(json["data"]["resolution"]["installed"], false);
     assert_eq!(
         json["data"]["resolution"]["installGuidance"]["suggestedEnsureCommand"],
@@ -167,12 +189,31 @@ fn resolve_manual_only_agent_returns_empty_install_methods() {
 fn resolve_returns_binary_path_for_installed_agent() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
 
     let output = run_agx(&workspace, &["--json", "resolve", "qoder"]);
 
     assert!(output.status.success());
     let json = stdout_json(&output);
     assert_eq!(json["data"]["resolution"]["installed"], true);
+    assert_eq!(json["data"]["resolution"]["installSource"], "bun");
+    assert_eq!(
+        json["data"]["resolution"]["suggestedLaunchCommand"][0],
+        json["data"]["resolution"]["binaryPath"]
+    );
     assert!(
         json["data"]["resolution"]["binaryPath"]
             .as_str()
@@ -180,4 +221,49 @@ fn resolve_returns_binary_path_for_installed_agent() {
             .contains("qodercli")
     );
     assert!(json["data"]["resolution"]["installGuidance"].is_null());
+}
+
+#[test]
+fn info_human_output_includes_install_methods_and_source_details() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx(&workspace, &["info", "qoder"]);
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+
+    assert!(output.status.success());
+    assert!(stdout.contains("Qoder CLI"));
+    assert!(stdout.contains("managed via bun (@qoder-ai/qodercli)"));
+    assert!(stdout.contains("Install Methods"));
+    assert!(stdout.contains("bun add -g @qoder-ai/qodercli"));
+}
+
+#[test]
+fn inspect_human_output_includes_capabilities_and_update_mode() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("claude");
+
+    let output = run_agx(&workspace, &["inspect", "claude"]);
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+
+    assert!(output.status.success());
+    assert!(stdout.contains("Capabilities"));
+    assert!(stdout.contains("Update Mode:"));
+    assert!(stdout.contains("command update"));
+    assert!(stdout.contains("auto-install:"));
+    assert!(stdout.contains("self-update:"));
 }
