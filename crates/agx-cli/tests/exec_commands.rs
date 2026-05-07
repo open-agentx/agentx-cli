@@ -236,6 +236,36 @@ fn exec_timeout_returns_timeout_error() {
 }
 
 #[test]
+fn exec_cancelled_returns_cancelled_error() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = support::run_agx_with_env(
+        &workspace,
+        &[
+            "--json",
+            "exec",
+            "qoder",
+            "--install",
+            "never",
+            "--",
+            "--version",
+        ],
+        &[("AGX_TEST_EXEC_MODE", "cancelled")],
+    );
+
+    assert_eq!(output.status.code(), Some(11));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "CANCELLED");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should be a string")
+            .contains("cancelled")
+    );
+}
+
+#[test]
 fn exec_spawn_failure_returns_invalid_argument() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");

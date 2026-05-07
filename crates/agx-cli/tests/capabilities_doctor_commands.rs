@@ -203,3 +203,60 @@ fn doctor_human_output_includes_summary_and_check_names() {
     assert!(stdout.contains("AGX CLI:"));
     assert!(stdout.contains("Issues:"));
 }
+
+#[test]
+fn doctor_human_output_shows_bun_recovery_for_outdated_self_install() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "bun"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["doctor"],
+        &[("AGX_TEST_LATEST_VERSION", "0.2.0")],
+    );
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Recovery:"));
+    assert!(stdout.contains("bun add -g agxctl@latest"));
+}
+
+#[test]
+fn doctor_human_output_shows_no_agents_installed_when_catalog_is_empty_on_path() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx(&workspace, &["doctor"]);
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("No agents installed"));
+}
+
+#[test]
+fn doctor_json_reports_self_auto_update_unavailable_for_source_builds() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "doctor"],
+        &[("AGX_TEST_LATEST_VERSION", "0.2.0")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let issues = json["data"]["issues"]
+        .as_array()
+        .expect("issues should be an array");
+    assert!(issues.iter().any(|issue| {
+        issue["code"] == "SELF_AUTO_UPDATE_UNAVAILABLE"
+            && issue["suggestedAction"] == "reinstall-self-with-auto-update-source"
+    }));
+}
