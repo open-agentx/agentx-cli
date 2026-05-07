@@ -8,7 +8,7 @@ use crate::doctor;
 use crate::errors::{AgxError, AgxErrorCode};
 use crate::exec;
 use crate::inspection;
-use crate::output::{CommandResult, CommandTarget};
+use crate::output::{CommandResult, CommandTarget, CommandWarning};
 use crate::package_manager;
 use crate::self_upgrade;
 
@@ -550,16 +550,27 @@ fn upgrade_command(
 ) -> CommandResult {
     match self_upgrade::upgrade_self(context, channel, check) {
         Ok(result) => {
+            let stale_latest = result
+                .latest_version
+                .as_deref()
+                .zip(result.current_version.as_deref())
+                .is_some_and(|(latest, current)| self_upgrade::is_version_older(latest, current));
             let target = CommandTarget {
                 kind: crate::output::TargetKind::SelfTarget,
                 name: Some("agx".to_string()),
             };
-            if check && result.status == "update-available" {
-                return CommandResult::success_with_exit_code(
-                    "upgrade", result, target, context, 1,
-                );
+            let mut command_result = if check && result.status == "update-available" {
+                CommandResult::success_with_exit_code("upgrade", result, target, context, 1)
+            } else {
+                CommandResult::success("upgrade", result, target, context)
+            };
+            if stale_latest {
+                command_result.warnings.push(CommandWarning {
+                    code: "STALE_LATEST_VERSION".to_string(),
+                    message: "Selected registry reported a version older than the current AGX build; downgrade was skipped.".to_string(),
+                });
             }
-            CommandResult::success("upgrade", result, target, context)
+            command_result
         }
         Err(error) => CommandResult::error(
             "upgrade",

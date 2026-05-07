@@ -259,6 +259,7 @@ fn render_human(result: &CommandResult) {
         "info" => render_info(result),
         "inspect" => render_inspect(result),
         "resolve" => render_resolve(result),
+        "upgrade" => render_upgrade(result),
         _ => {
             if let Some(error) = &result.error {
                 eprintln!("{}", error.message);
@@ -679,6 +680,49 @@ fn render_resolve(result: &CommandResult) {
         println!("  Launch:        {launch}");
     }
     println!();
+}
+
+fn render_upgrade(result: &CommandResult) {
+    if let Some(error) = &result.error {
+        println!("{}", error.message);
+        if let Some(data) = &result.data
+            && let Some(message) = data["message"].as_str()
+        {
+            println!("{message}");
+        }
+        return;
+    }
+
+    let Some(data) = &result.data else {
+        return;
+    };
+    let status = data["status"].as_str().unwrap_or("unknown");
+    match status {
+        "update-available" => {
+            let latest = data["latestVersion"].as_str().unwrap_or("unknown");
+            let channel = data["channel"].as_str().unwrap_or("stable");
+            println!("Update available: {latest} ({channel})");
+        }
+        "up-to-date" => {
+            println!("AGX is already up to date.");
+            if let Some(message) = data["message"].as_str() {
+                println!("{message}");
+            }
+        }
+        "planned" => {
+            println!("Planned AGX upgrade:");
+            if let Some(command) = data["command"].as_array() {
+                let command = command
+                    .iter()
+                    .filter_map(|part| part.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                println!("{command}");
+            }
+        }
+        "upgraded" => println!("AGX upgraded successfully."),
+        _ => println!("{data}"),
+    }
 }
 
 fn yes_no(value: Option<bool>) -> &'static str {

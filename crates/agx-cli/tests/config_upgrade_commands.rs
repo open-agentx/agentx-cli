@@ -203,6 +203,45 @@ fn upgrade_check_reports_up_to_date_when_versions_match() {
 }
 
 #[test]
+fn upgrade_treats_lower_latest_version_as_stale_instead_of_downgrading() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "npm"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "upgrade"],
+        &[("AGX_TEST_LATEST_VERSION", "0.0.9")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["status"], "up-to-date");
+    assert_eq!(json["data"]["latestVersion"], "0.0.9");
+    assert_eq!(json["warnings"][0]["code"], "STALE_LATEST_VERSION");
+    assert!(
+        json["data"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("will not downgrade")
+    );
+    assert_eq!(
+        json["data"]["command"]
+            .as_array()
+            .expect("command should be an array")
+            .len(),
+        0
+    );
+}
+
+#[test]
 fn upgrade_check_uses_beta_channel_for_dist_tag_and_command() {
     let workspace = TestWorkspace::new();
     workspace.write_state_bytes(

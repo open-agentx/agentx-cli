@@ -125,6 +125,32 @@ pub fn upgrade_self(
         });
     }
 
+    if let Some(latest_version) = latest_version.as_deref()
+        && !is_version_newer(latest_version, env!("CARGO_PKG_VERSION"))
+    {
+        return Ok(UpgradeData {
+            channel: Some(channel),
+            command: Vec::new(),
+            current_version,
+            dry_run: context.dry_run,
+            install_source,
+            latest_version: Some(latest_version.to_string()),
+            message: Some(
+                if is_version_older(latest_version, env!("CARGO_PKG_VERSION")) {
+                    format!(
+                        "Selected registry reported {latest_version}, which is older than the current AGX version {}; AGX will not downgrade.",
+                        env!("CARGO_PKG_VERSION")
+                    )
+                } else {
+                    "AGX is already up to date.".to_string()
+                },
+            ),
+            package_name: AGX_PACKAGE_NAME,
+            status: "up-to-date",
+            verified_version: None,
+        });
+    }
+
     match install_source {
         InstallSourceKind::Npm => {
             upgrade_managed(context, "npm", channel, current_version, latest_version)
@@ -344,6 +370,16 @@ fn is_version_newer(candidate: &str, current: &str) -> bool {
     ) {
         (Ok(candidate), Ok(current)) => candidate > current,
         _ => candidate != current,
+    }
+}
+
+pub fn is_version_older(candidate: &str, current: &str) -> bool {
+    match (
+        semver::Version::parse(candidate),
+        semver::Version::parse(current),
+    ) {
+        (Ok(candidate), Ok(current)) => candidate < current,
+        _ => false,
     }
 }
 
