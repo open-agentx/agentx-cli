@@ -575,6 +575,33 @@ fn run_external_command(command: &[String], error_code: AgxErrorCode) -> Result<
     }
 
     if std::env::var("AGX_TEST_ALLOW_EXTERNAL_SUCCESS").as_deref() == Ok("1") {
+        if let (Ok(binary_name), Ok(directory)) = (
+            std::env::var("AGX_TEST_CREATE_BINARY_NAME"),
+            std::env::var("AGX_TEST_CREATE_BINARY_DIR"),
+        ) {
+            let source = std::env::current_exe().map_err(|error| {
+                AgxError::new(
+                    error_code,
+                    format!("Failed to locate AGX test executable: {error}"),
+                )
+            })?;
+            let extension = if cfg!(windows) { ".exe" } else { "" };
+            let target = PathBuf::from(directory).join(format!("{binary_name}{extension}"));
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).map_err(|error| {
+                    AgxError::new(
+                        error_code,
+                        format!("Failed to prepare AGX test binary directory: {error}"),
+                    )
+                })?;
+            }
+            fs::copy(source, target).map_err(|error| {
+                AgxError::new(
+                    error_code,
+                    format!("Failed to create AGX test binary: {error}"),
+                )
+            })?;
+        }
         return Ok(());
     }
 

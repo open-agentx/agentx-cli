@@ -3,7 +3,7 @@
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct TestWorkspace {
@@ -104,6 +104,24 @@ pub fn run_agx(workspace: &TestWorkspace, args: &[&str]) -> Output {
 }
 
 pub fn run_agx_with_env(workspace: &TestWorkspace, args: &[&str], envs: &[(&str, &str)]) -> Output {
+    run_agx_with_io(workspace, args, envs, None)
+}
+
+pub fn run_agx_with_stdin(
+    workspace: &TestWorkspace,
+    args: &[&str],
+    envs: &[(&str, &str)],
+    stdin: &str,
+) -> Output {
+    run_agx_with_io(workspace, args, envs, Some(stdin))
+}
+
+fn run_agx_with_io(
+    workspace: &TestWorkspace,
+    args: &[&str],
+    envs: &[(&str, &str)],
+    stdin: Option<&str>,
+) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_agx"));
     command.args(args);
     command.env("USERPROFILE", workspace.root());
@@ -113,7 +131,21 @@ pub fn run_agx_with_env(workspace: &TestWorkspace, args: &[&str], envs: &[(&str,
     for (key, value) in envs {
         command.env(key, value);
     }
-    command.output().expect("failed to run agx")
+    if let Some(stdin) = stdin {
+        command.stdin(Stdio::piped());
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+        let mut child = command.spawn().expect("failed to spawn agx");
+        if let Some(mut writer) = child.stdin.take() {
+            use std::io::Write;
+            writer
+                .write_all(stdin.as_bytes())
+                .expect("failed to write agx stdin");
+        }
+        child.wait_with_output().expect("failed to wait for agx")
+    } else {
+        command.output().expect("failed to run agx")
+    }
 }
 
 pub fn stdout_json(output: &Output) -> serde_json::Value {

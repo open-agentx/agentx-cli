@@ -47,6 +47,14 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - THEN AGX treats the invocation as shortcut execution for that agent
 - AND uses the same execution behavior as `agx exec`
 
+#### Scenario: Shortcut execution needs an install confirmation
+
+- GIVEN the requested agent is not installed
+- WHEN the user runs `agx <agent> <args>` in an interactive session
+- THEN AGX asks whether it should install the agent first
+- AND installs before execution when the user confirms
+- AND returns a cancelled result when the user declines
+
 ### Requirement: Lifecycle commands MUST support dry-run behavior
 
 AGX SHALL support dry-run planning for lifecycle and execution commands that can mutate state or invoke external installers.

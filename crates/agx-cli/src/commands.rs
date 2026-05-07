@@ -90,21 +90,33 @@ fn shortcut_exec_command(args: &[String], context: &CliContext) -> CommandResult
 
     if let Some(agent) = agents::resolve_agent(agent_name)
         && inspection::find_binary_in_path(agent.binary_name).is_none()
-        && !context.interactive
-        && !context.assume_yes
     {
-        let result = exec_missing_result(
-            agent,
-            agent_args,
-            crate::cli::InstallPolicyArg::IfMissing,
-            context,
-            AgxErrorCode::InteractionRequired,
-            format!(
-                "{} is not installed and interactive installation is disabled.",
-                agent.display_name
-            ),
-        );
-        return result;
+        if !context.interactive && !context.assume_yes {
+            let result = exec_missing_result(
+                agent,
+                agent_args,
+                crate::cli::InstallPolicyArg::IfMissing,
+                context,
+                AgxErrorCode::InteractionRequired,
+                format!(
+                    "{} is not installed and interactive installation is disabled.",
+                    agent.display_name
+                ),
+            );
+            return result;
+        }
+
+        if context.interactive && !context.assume_yes && !confirm_shortcut_install(agent, context) {
+            return CommandResult::error(
+                "exec",
+                AgxError::new(
+                    AgxErrorCode::Cancelled,
+                    format!("Installation cancelled for {}.", agent.display_name),
+                ),
+                CommandTarget::agent(agent.name),
+                context,
+            );
+        }
     }
 
     exec_command(
@@ -113,6 +125,26 @@ fn shortcut_exec_command(args: &[String], context: &CliContext) -> CommandResult
         crate::cli::InstallPolicyArg::IfMissing,
         context,
     )
+}
+
+fn confirm_shortcut_install(agent: AgentDefinition, context: &CliContext) -> bool {
+    if !context.interactive || context.assume_yes {
+        return true;
+    }
+
+    eprintln!(
+        "{} is not installed. Install it now? [y/N]",
+        agent.display_name
+    );
+
+    if let Ok(answer) = std::env::var("AGX_TEST_PROMPT_RESPONSE") {
+        return matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes");
+    }
+
+    let mut input = String::new();
+    std::io::stdin()
+        .read_line(&mut input)
+        .is_ok_and(|_| matches!(input.trim().to_ascii_lowercase().as_str(), "y" | "yes"))
 }
 
 #[derive(Debug, Serialize)]

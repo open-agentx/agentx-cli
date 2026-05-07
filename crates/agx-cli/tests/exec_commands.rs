@@ -210,6 +210,58 @@ fn shortcut_exec_non_interactive_returns_interaction_required_when_install_is_ne
 }
 
 #[test]
+fn shortcut_exec_installs_after_interactive_confirmation() {
+    let workspace = TestWorkspace::new();
+    let bin_dir = workspace.bin_dir().to_string_lossy().into_owned();
+
+    let output = support::run_agx_with_stdin(
+        &workspace,
+        &["qoder", "--", "--version"],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_CREATE_BINARY_NAME", "qodercli"),
+            ("AGX_TEST_CREATE_BINARY_DIR", &bin_dir),
+        ],
+        "y\n",
+    );
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("agx 0.1.0"));
+}
+
+#[test]
+fn shortcut_exec_cancelled_install_returns_cancelled_error() {
+    let workspace = TestWorkspace::new();
+
+    let output = support::run_agx_with_stdin(&workspace, &["qoder", "--", "--version"], &[], "n\n");
+
+    assert_eq!(output.status.code(), Some(11));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("cancelled"));
+}
+
+#[test]
+fn shortcut_exec_assume_yes_installs_without_prompt() {
+    let workspace = TestWorkspace::new();
+    let bin_dir = workspace.bin_dir().to_string_lossy().into_owned();
+
+    let output = support::run_agx_with_env(
+        &workspace,
+        &["--yes", "qoder", "--", "--version"],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_CREATE_BINARY_NAME", "qodercli"),
+            ("AGX_TEST_CREATE_BINARY_DIR", &bin_dir),
+        ],
+    );
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("agx 0.1.0"));
+}
+
+#[test]
 fn exec_timeout_returns_timeout_error() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
