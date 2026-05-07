@@ -141,6 +141,12 @@ fn schema_json_filters_to_a_specific_command() {
     assert_eq!(schemas.len(), 1);
     assert_eq!(schemas[0]["name"], "inspect");
     assert_eq!(schemas[0]["ndjsonEventSchema"]["type"], "object");
+    let properties = schemas[0]["dataSchema"]["properties"]
+        .as_array()
+        .expect("inspect schema properties should be an array");
+    assert!(properties.iter().any(|item| item["name"] == "agent"));
+    assert!(properties.iter().any(|item| item["name"] == "capabilities"));
+    assert!(properties.iter().any(|item| item["name"] == "inspection"));
 }
 
 #[test]
@@ -191,6 +197,213 @@ fn schema_upgrade_reflects_channel_and_version_fields() {
     );
     assert!(
         properties
+            .iter()
+            .any(|item| item["name"] == "latestVersion")
+    );
+}
+
+#[test]
+fn schema_doctor_describes_machine_actionable_issue_fields() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "schema", "doctor"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let properties = json["data"]["commands"][0]["dataSchema"]["properties"]
+        .as_array()
+        .expect("doctor properties should be an array");
+    let issues = properties
+        .iter()
+        .find(|item| item["name"] == "issues")
+        .expect("issues property should exist");
+    let issue_properties = issues["schema"]["items"]["properties"]
+        .as_array()
+        .expect("issue properties should be an array");
+
+    assert!(
+        issue_properties
+            .iter()
+            .any(|item| item["name"] == "suggestedAction")
+    );
+    assert!(
+        issue_properties
+            .iter()
+            .any(|item| item["name"] == "suggestedCommands")
+    );
+    assert!(
+        issue_properties
+            .iter()
+            .any(|item| item["name"] == "docsRef")
+    );
+}
+
+#[test]
+fn schema_exec_and_resolve_include_install_guidance_fields() {
+    let workspace = TestWorkspace::new();
+
+    let exec_output = run_agx(&workspace, &["--json", "schema", "exec"]);
+    assert!(exec_output.status.success());
+    let exec_json = stdout_json(&exec_output);
+    let exec_properties = exec_json["data"]["commands"][0]["dataSchema"]["properties"]
+        .as_array()
+        .expect("exec properties should be an array");
+    let install_guidance = exec_properties
+        .iter()
+        .find(|item| item["name"] == "installGuidance")
+        .expect("exec installGuidance should exist");
+    let exec_guidance_properties = install_guidance["schema"]["properties"]
+        .as_array()
+        .expect("exec install guidance properties should be an array");
+    assert!(
+        exec_guidance_properties
+            .iter()
+            .any(|item| item["name"] == "suggestedExecCommand")
+    );
+    assert!(
+        exec_guidance_properties
+            .iter()
+            .any(|item| item["name"] == "installMethods")
+    );
+
+    let resolve_output = run_agx(&workspace, &["--json", "schema", "resolve"]);
+    assert!(resolve_output.status.success());
+    let resolve_json = stdout_json(&resolve_output);
+    let resolve_properties = resolve_json["data"]["commands"][0]["dataSchema"]["properties"]
+        .as_array()
+        .expect("resolve properties should be an array");
+    let resolution = resolve_properties
+        .iter()
+        .find(|item| item["name"] == "resolution")
+        .expect("resolution property should exist");
+    let resolution_properties = resolution["schema"]["properties"]
+        .as_array()
+        .expect("resolution properties should be an array");
+    let install_guidance = resolution_properties
+        .iter()
+        .find(|item| item["name"] == "installGuidance")
+        .expect("resolve installGuidance should exist");
+    let resolve_guidance_properties = install_guidance["schema"]["properties"]
+        .as_array()
+        .expect("resolve install guidance properties should be an array");
+    assert!(
+        resolution_properties
+            .iter()
+            .any(|item| item["name"] == "installed")
+    );
+    assert!(
+        resolve_guidance_properties
+            .iter()
+            .any(|item| item["name"] == "suggestedEnsureCommand")
+    );
+}
+
+#[test]
+fn schema_capabilities_and_commands_describe_nested_contracts() {
+    let workspace = TestWorkspace::new();
+
+    let capabilities_output = run_agx(&workspace, &["--json", "schema", "capabilities"]);
+    assert!(capabilities_output.status.success());
+    let capabilities_json = stdout_json(&capabilities_output);
+    let capabilities_properties =
+        capabilities_json["data"]["commands"][0]["dataSchema"]["properties"]
+            .as_array()
+            .expect("capabilities properties should be an array");
+    let features = capabilities_properties
+        .iter()
+        .find(|item| item["name"] == "features")
+        .expect("features property should exist");
+    let feature_properties = features["schema"]["properties"]
+        .as_array()
+        .expect("feature properties should be an array");
+    assert!(
+        feature_properties
+            .iter()
+            .any(|item| item["name"] == "execInstallPolicies")
+    );
+    assert!(
+        feature_properties
+            .iter()
+            .any(|item| item["name"] == "colorModes")
+    );
+
+    let commands_output = run_agx(&workspace, &["--json", "schema", "commands"]);
+    assert!(commands_output.status.success());
+    let commands_json = stdout_json(&commands_output);
+    let commands_properties = commands_json["data"]["commands"][0]["dataSchema"]["properties"]
+        .as_array()
+        .expect("commands properties should be an array");
+    let commands = commands_properties
+        .iter()
+        .find(|item| item["name"] == "commands")
+        .expect("commands property should exist");
+    let descriptor_properties = commands["schema"]["items"]["properties"]
+        .as_array()
+        .expect("descriptor properties should be an array");
+    assert!(
+        descriptor_properties
+            .iter()
+            .any(|item| item["name"] == "outputSchemaRef")
+    );
+    assert!(
+        descriptor_properties
+            .iter()
+            .any(|item| item["name"] == "stability")
+    );
+}
+
+#[test]
+fn schema_info_and_update_describe_payload_fields() {
+    let workspace = TestWorkspace::new();
+
+    let info_output = run_agx(&workspace, &["--json", "schema", "info"]);
+    assert!(info_output.status.success());
+    let info_json = stdout_json(&info_output);
+    let info_properties = info_json["data"]["commands"][0]["dataSchema"]["properties"]
+        .as_array()
+        .expect("info properties should be an array");
+    let agent = info_properties
+        .iter()
+        .find(|item| item["name"] == "agent")
+        .expect("agent property should exist");
+    let agent_properties = agent["schema"]["properties"]
+        .as_array()
+        .expect("agent properties should be an array");
+    assert!(
+        agent_properties
+            .iter()
+            .any(|item| item["name"] == "aliases")
+    );
+    assert!(
+        agent_properties
+            .iter()
+            .any(|item| item["name"] == "selfUpdateCommands")
+    );
+
+    let update_output = run_agx(&workspace, &["--json", "schema", "update"]);
+    assert!(update_output.status.success());
+    let update_json = stdout_json(&update_output);
+    let update_properties = update_json["data"]["commands"][0]["dataSchema"]["properties"]
+        .as_array()
+        .expect("update properties should be an array");
+    let results = update_properties
+        .iter()
+        .find(|item| item["name"] == "results")
+        .expect("results property should exist");
+    let result_properties = results["schema"]["items"]["properties"]
+        .as_array()
+        .expect("update result properties should be an array");
+    assert!(
+        result_properties
+            .iter()
+            .any(|item| item["name"] == "strategy")
+    );
+    assert!(
+        result_properties
+            .iter()
+            .any(|item| item["name"] == "installedVersion")
+    );
+    assert!(
+        result_properties
             .iter()
             .any(|item| item["name"] == "latestVersion")
     );

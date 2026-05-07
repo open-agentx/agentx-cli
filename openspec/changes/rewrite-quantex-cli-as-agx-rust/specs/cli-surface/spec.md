@@ -49,3 +49,18 @@ AGX SHALL support human, JSON, and NDJSON output modes.
 - WHEN the user runs a supported command with `--output ndjson`
 - THEN AGX emits newline-delimited event envelopes
 - AND the final event contains the command result
+
+### Requirement: AGX MUST expose machine-readable command and schema contracts
+
+AGX SHALL publish stable command-catalog and schema-catalog metadata for automation and agent tooling.
+
+#### Scenario: Machine consumer inspects the command catalog
+
+- WHEN the user runs `agx commands --json`
+- THEN each command entry includes its name, summary, supported flags, stability, and output schema reference
+
+#### Scenario: Machine consumer inspects a specific structured schema
+
+- WHEN the user runs `agx schema <command> --json`
+- THEN AGX returns the requested command schema only
+- AND the schema includes nested fields needed to automate capabilities, config, doctor, exec, info, inspect, resolve, upgrade, and update results
