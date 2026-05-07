@@ -26,6 +26,7 @@ fn install_dry_run_returns_planned_managed_state() {
     assert_eq!(json["action"], "install");
     assert_eq!(json["data"]["installed"], false);
     assert_eq!(json["data"]["installState"]["installType"], "bun");
+    assert_eq!(json["warnings"][0]["code"], "DRY_RUN");
     assert_eq!(
         json["data"]["installState"]["packageName"],
         "@qoder-ai/qodercli"
@@ -161,11 +162,14 @@ fn install_ndjson_emits_single_result_event() {
 
     assert!(output.status.success());
     let lines = stdout_json_lines(&output);
-    assert_eq!(lines.len(), 1);
-    assert_eq!(lines[0]["type"], "result");
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0]["type"], "started");
     assert_eq!(lines[0]["action"], "install");
-    assert_eq!(lines[0]["meta"]["mode"], "ndjson");
-    assert_eq!(lines[0]["data"]["data"]["agent"]["name"], "qoder");
+    assert_eq!(lines[0]["data"]["agent"], "qoder");
+    assert_eq!(lines[1]["type"], "result");
+    assert_eq!(lines[1]["action"], "install");
+    assert_eq!(lines[1]["meta"]["mode"], "ndjson");
+    assert_eq!(lines[1]["data"]["data"]["agent"]["name"], "qoder");
 }
 
 #[test]
@@ -347,12 +351,47 @@ fn uninstall_dry_run_uses_recorded_managed_package() {
     let json = stdout_json(&output);
     assert_eq!(json["action"], "uninstall");
     assert_eq!(json["data"]["installed"], true);
+    assert_eq!(json["warnings"][0]["code"], "DRY_RUN");
     assert!(
         json["data"]["message"]
             .as_str()
             .expect("message should exist")
             .contains("npm uninstall -g @qoder-ai/qodercli")
     );
+}
+
+#[test]
+fn uninstall_ndjson_emits_started_and_result_events() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx(
+        &workspace,
+        &["--output", "ndjson", "--dry-run", "uninstall", "qoder"],
+    );
+
+    assert!(output.status.success());
+    let lines = stdout_json_lines(&output);
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0]["type"], "started");
+    assert_eq!(lines[0]["action"], "uninstall");
+    assert_eq!(lines[0]["data"]["agent"], "qoder");
+    assert_eq!(lines[1]["type"], "result");
+    assert_eq!(lines[1]["action"], "uninstall");
+    assert_eq!(lines[1]["data"]["data"]["agent"]["name"], "qoder");
 }
 
 #[test]

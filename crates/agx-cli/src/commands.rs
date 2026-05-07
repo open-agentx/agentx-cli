@@ -1227,22 +1227,36 @@ fn lifecycle_command(
         return agent_not_found_result(action, agent_name, context);
     };
 
+    let _ = crate::output::emit_ndjson_event(
+        action,
+        "started",
+        serde_json::json!({ "agent": agent.name }),
+        Some(CommandTarget::agent(agent.name)),
+        context,
+    );
+
     match operation(agent, context) {
-        Ok(result) => CommandResult::success(
-            action,
-            LifecycleData {
-                agent: LifecycleAgent {
-                    display_name: agent.display_name,
-                    name: agent.name,
+        Ok(result) => {
+            let mut command_result = CommandResult::success(
+                action,
+                LifecycleData {
+                    agent: LifecycleAgent {
+                        display_name: agent.display_name,
+                        name: agent.name,
+                    },
+                    changed: result.changed,
+                    install_state: result.install_state,
+                    installed: result.installed,
+                    message: result.message,
                 },
-                changed: result.changed,
-                install_state: result.install_state,
-                installed: result.installed,
-                message: result.message,
-            },
-            CommandTarget::agent(agent.name),
-            context,
-        ),
+                CommandTarget::agent(agent.name),
+                context,
+            );
+            if context.dry_run {
+                command_result.warnings.push(dry_run_warning());
+            }
+            command_result
+        }
         Err(error) => {
             CommandResult::error(action, error, CommandTarget::agent(agent.name), context)
         }
@@ -2299,6 +2313,13 @@ fn exec_missing_result(
         CommandTarget::agent(agent.name),
         context,
     )
+}
+
+fn dry_run_warning() -> CommandWarning {
+    CommandWarning {
+        code: "DRY_RUN".to_string(),
+        message: "Dry run mode is enabled; no changes were applied.".to_string(),
+    }
 }
 
 fn object_schema(properties: Vec<(&'static str, JsonSchema)>) -> JsonSchema {
