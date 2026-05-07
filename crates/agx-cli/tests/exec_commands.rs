@@ -137,14 +137,22 @@ fn exec_without_install_policy_returns_manual_action_required_when_missing() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "exec", "jcode", "--", "--version"]);
 
-    assert_eq!(output.status.code(), Some(8));
+    assert_eq!(output.status.code(), Some(4));
     let json = stdout_json(&output);
-    assert_eq!(json["error"]["code"], "MANUAL_ACTION_REQUIRED");
+    assert_eq!(json["error"]["code"], "AGENT_NOT_INSTALLED");
     assert!(
         json["error"]["message"]
             .as_str()
             .expect("message should be a string")
             .contains("agx ensure jcode")
+    );
+    assert_eq!(
+        json["data"]["installGuidance"]["suggestedEnsureCommand"],
+        "agx ensure jcode"
+    );
+    assert_eq!(
+        json["data"]["installGuidance"]["suggestedExecCommand"],
+        "agx exec jcode --install if-missing -- --version"
     );
 }
 
@@ -186,4 +194,67 @@ fn shortcut_exec_rejects_structured_output_modes() {
             .expect("message should be a string")
             .contains("Structured output is not supported")
     );
+}
+
+#[test]
+fn shortcut_exec_non_interactive_returns_interaction_required_when_install_is_needed() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(
+        &workspace,
+        &["--non-interactive", "qoder", "--", "--version"],
+    );
+
+    assert_eq!(output.status.code(), Some(7));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("interactive installation is disabled"));
+}
+
+#[test]
+fn exec_timeout_returns_timeout_error() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = support::run_agx_with_env(
+        &workspace,
+        &[
+            "--json",
+            "--timeout",
+            "10ms",
+            "exec",
+            "qoder",
+            "--install",
+            "never",
+            "--",
+            "--version",
+        ],
+        &[("AGX_TEST_EXEC_MODE", "timeout")],
+    );
+
+    assert_eq!(output.status.code(), Some(10));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "TIMEOUT");
+}
+
+#[test]
+fn exec_spawn_failure_returns_invalid_argument() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = support::run_agx_with_env(
+        &workspace,
+        &[
+            "--json",
+            "exec",
+            "qoder",
+            "--install",
+            "never",
+            "--",
+            "--version",
+        ],
+        &[("AGX_TEST_EXEC_MODE", "spawn-fail")],
+    );
+
+    assert_eq!(output.status.code(), Some(2));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "INVALID_ARGUMENT");
 }

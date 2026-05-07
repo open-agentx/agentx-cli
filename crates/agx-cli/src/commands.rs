@@ -86,6 +86,25 @@ fn shortcut_exec_command(args: &[String], context: &CliContext) -> CommandResult
         agent_args
     };
 
+    if let Some(agent) = agents::resolve_agent(agent_name)
+        && inspection::find_binary_in_path(agent.binary_name).is_none()
+        && !context.interactive
+        && !context.assume_yes
+    {
+        let result = exec_missing_result(
+            agent,
+            agent_args,
+            crate::cli::InstallPolicyArg::IfMissing,
+            context,
+            AgxErrorCode::InteractionRequired,
+            format!(
+                "{} is not installed and interactive installation is disabled.",
+                agent.display_name
+            ),
+        );
+        return result;
+    }
+
     exec_command(
         agent_name,
         agent_args,
@@ -526,6 +545,21 @@ fn exec_command(
                 CommandTarget::agent(agent.name),
                 context,
                 exit_code,
+            )
+        }
+        Err(error)
+            if matches!(
+                error.code,
+                AgxErrorCode::AgentNotInstalled | AgxErrorCode::InteractionRequired
+            ) =>
+        {
+            exec_missing_result(
+                agent,
+                args,
+                install_policy,
+                context,
+                error.code,
+                error.message,
             )
         }
         Err(error) => {
@@ -1629,6 +1663,46 @@ fn invalid_config_argument(
         "config",
         AgxError::new(AgxErrorCode::InvalidArgument, message),
         CommandTarget::config(key),
+        context,
+    )
+}
+
+fn exec_missing_result(
+    agent: AgentDefinition,
+    args: &[String],
+    install_policy: crate::cli::InstallPolicyArg,
+    context: &CliContext,
+    error_code: AgxErrorCode,
+    message: String,
+) -> CommandResult {
+    CommandResult::error_with_data(
+        "exec",
+        exec::ExecResult {
+            agent: exec::ExecAgent {
+                display_name: agent.display_name,
+                name: agent.name,
+            },
+            args: args.to_vec(),
+            binary_path: None,
+            command: std::iter::once(agent.binary_name.to_string())
+                .chain(args.iter().cloned())
+                .collect(),
+            dry_run: false,
+            exit_code: None,
+            install_policy: match install_policy {
+                crate::cli::InstallPolicyArg::Never => "never",
+                crate::cli::InstallPolicyArg::IfMissing => "if-missing",
+                crate::cli::InstallPolicyArg::Always => "always",
+            },
+            install_guidance: Some(exec::install_guidance(agent, args)),
+            installed_after: false,
+            installed_before: false,
+            message: Some(message.clone()),
+            stderr: None,
+            stdout: None,
+        },
+        AgxError::new(error_code, message),
+        CommandTarget::agent(agent.name),
         context,
     )
 }

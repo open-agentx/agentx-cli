@@ -255,6 +255,7 @@ fn render_human(result: &CommandResult) {
                 render_doctor(data);
             }
         }
+        "exec" => render_exec(result),
         "list" => render_list(result),
         "info" => render_info(result),
         "inspect" => render_inspect(result),
@@ -794,6 +795,35 @@ fn render_update(result: &CommandResult) {
                 }
                 _ => println!("{result}"),
             }
+        }
+    }
+}
+
+fn render_exec(result: &CommandResult) {
+    if let Some(error) = &result.error {
+        eprintln!("{}", error.message);
+        if let Some(data) = &result.data {
+            if let Some(ensure) = data["installGuidance"]["suggestedEnsureCommand"].as_str() {
+                eprintln!("Try: {ensure}");
+            }
+            if let Some(exec) = data["installGuidance"]["suggestedExecCommand"].as_str() {
+                eprintln!("Or:  {exec}");
+            }
+        }
+        return;
+    }
+
+    if let Some(data) = &result.data {
+        if let Some(stdout) = data["stdout"].as_str() {
+            print!("{stdout}");
+        }
+        if let Some(stderr) = data["stderr"].as_str() {
+            eprint!("{stderr}");
+        }
+        if data["dryRun"].as_bool().unwrap_or(false)
+            && let Some(message) = data["message"].as_str()
+        {
+            println!("{message}");
         }
     }
 }

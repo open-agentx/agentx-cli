@@ -20,6 +20,8 @@ pub struct ExecResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<u8>,
     pub install_policy: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub install_guidance: Option<ExecInstallGuidance>,
     pub installed_after: bool,
     pub installed_before: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -35,6 +37,25 @@ pub struct ExecResult {
 pub struct ExecAgent {
     pub display_name: &'static str,
     pub name: &'static str,
+}
+
+#[derive(Debug, serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecInstallGuidance {
+    pub docs_ref: &'static str,
+    pub install_methods: Vec<ExecInstallMethod>,
+    pub suggested_action: &'static str,
+    pub suggested_ensure_command: String,
+    pub suggested_exec_command: String,
+}
+
+#[derive(Debug, serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecInstallMethod {
+    pub command: String,
+    pub label: &'static str,
+    #[serde(rename = "type")]
+    pub method_type: &'static str,
 }
 
 pub fn execute_agent(
@@ -57,6 +78,7 @@ pub fn execute_agent(
             dry_run: true,
             exit_code: None,
             install_policy: install_policy_label(install_policy),
+            install_guidance: (!installed_before).then(|| install_guidance(agent, args)),
             installed_after: installed_before,
             installed_before,
             message: Some(if needs_install {
@@ -80,7 +102,7 @@ pub fn execute_agent(
 
     let Some(binary_path) = inspection::find_binary_in_path(agent.binary_name) else {
         return Err(AgxError::new(
-            AgxErrorCode::ManualActionRequired,
+            AgxErrorCode::AgentNotInstalled,
             format!(
                 "{} is not installed. Run `agx ensure {}` or retry with `--install-policy if-missing`.",
                 agent.display_name, agent.name
@@ -98,6 +120,7 @@ pub fn execute_agent(
         dry_run: false,
         exit_code: Some(output.exit_code),
         install_policy: install_policy_label(install_policy),
+        install_guidance: None,
         installed_after: true,
         installed_before,
         message: None,
@@ -111,6 +134,31 @@ fn run_agent_command(
     args: &[String],
     timeout_ms: Option<u64>,
 ) -> Result<AgentCommandOutput, AgxError> {
+    if let Ok(mode) = std::env::var("AGX_TEST_EXEC_MODE") {
+        return match mode.as_str() {
+            "timeout" => Err(AgxError::new(
+                AgxErrorCode::Timeout,
+                format!(
+                    "Agent execution timed out after {}ms.",
+                    timeout_ms.unwrap_or_default()
+                ),
+            )),
+            "cancelled" => Err(AgxError::new(
+                AgxErrorCode::Cancelled,
+                "Agent execution was cancelled.",
+            )),
+            "spawn-fail" => Err(AgxError::new(
+                AgxErrorCode::InvalidArgument,
+                "Failed to execute agent: synthetic spawn failure",
+            )),
+            _ => Ok(AgentCommandOutput {
+                exit_code: 0,
+                stderr: String::new(),
+                stdout: String::new(),
+            }),
+        };
+    }
+
     if let Some(timeout_ms) = timeout_ms {
         return run_agent_command_with_timeout(binary_path, args, timeout_ms);
     }
@@ -227,5 +275,40 @@ fn non_empty_output(output: String) -> Option<String> {
         None
     } else {
         Some(output)
+    }
+}
+
+pub fn install_guidance(agent: AgentDefinition, args: &[String]) -> ExecInstallGuidance {
+    let install_methods = agent.npm_package.map_or_else(Vec::new, |package| {
+        vec![
+            ExecInstallMethod {
+                command: format!("bun add -g {package}"),
+                label: "bun",
+                method_type: "bun",
+            },
+            ExecInstallMethod {
+                command: format!("npm install -g {package}"),
+                label: "npm",
+                method_type: "npm",
+            },
+        ]
+    });
+
+    ExecInstallGuidance {
+        docs_ref: "openspec/changes/rewrite-quantex-cli-as-agx-rust/tasks.md",
+        install_methods,
+        suggested_action: "rerun-with-install-policy",
+        suggested_ensure_command: format!("agx ensure {}", agent.name),
+        suggested_exec_command: std::iter::once("agx".to_string())
+            .chain([
+                "exec".to_string(),
+                agent.name.to_string(),
+                "--install".to_string(),
+                "if-missing".to_string(),
+                "--".to_string(),
+            ])
+            .chain(args.iter().cloned())
+            .collect::<Vec<_>>()
+            .join(" "),
     }
 }
