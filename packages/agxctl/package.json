@@ -1,5 +1,5 @@
 {
-  "name": "agx-cli",
+  "name": "agxctl",
   "version": "0.1.0",
   "description": "Rust-native AGX command launcher",
   "license": "MIT",
@@ -10,12 +10,12 @@
     "bin"
   ],
   "optionalDependencies": {
-    "agx-cli-darwin-arm64": "0.1.0",
-    "agx-cli-darwin-x64": "0.1.0",
-    "agx-cli-linux-arm64": "0.1.0",
-    "agx-cli-linux-x64": "0.1.0",
-    "agx-cli-win32-arm64": "0.1.0",
-    "agx-cli-win32-x64": "0.1.0"
+    "agxctl-darwin-arm64": "0.1.0",
+    "agxctl-darwin-x64": "0.1.0",
+    "agxctl-linux-arm64": "0.1.0",
+    "agxctl-linux-x64": "0.1.0",
+    "agxctl-win32-arm64": "0.1.0",
+    "agxctl-win32-x64": "0.1.0"
   },
   "engines": {
     "node": ">=18"

@@ -5,12 +5,12 @@ const { dirname, join, resolve } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const platformPackageNames = {
-  "darwin-arm64": "agx-cli-darwin-arm64",
-  "darwin-x64": "agx-cli-darwin-x64",
-  "linux-arm64": "agx-cli-linux-arm64",
-  "linux-x64": "agx-cli-linux-x64",
-  "win32-arm64": "agx-cli-win32-arm64",
-  "win32-x64": "agx-cli-win32-x64"
+  "darwin-arm64": "agxctl-darwin-arm64",
+  "darwin-x64": "agxctl-darwin-x64",
+  "linux-arm64": "agxctl-linux-arm64",
+  "linux-x64": "agxctl-linux-x64",
+  "win32-arm64": "agxctl-win32-arm64",
+  "win32-x64": "agxctl-win32-x64"
 };
 
 function resolveBinary() {
@@ -43,7 +43,7 @@ function resolveBinary() {
   }
 
   throw new Error(
-    `No AGX native binary found for ${key}. Reinstall agx-cli or set AGX_BINARY_PATH.`
+    `No AGX native binary found for ${key}. Reinstall agxctl or set AGX_BINARY_PATH.`
   );
 }
 
