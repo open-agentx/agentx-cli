@@ -1,6 +1,6 @@
 mod support;
 
-use support::{TestWorkspace, run_agx, stdout_json};
+use support::{TestWorkspace, run_agx, stdout_json, stdout_json_lines};
 
 #[test]
 fn explicit_exec_returns_structured_process_result() {
@@ -104,6 +104,34 @@ fn exec_always_policy_runs_when_binary_is_already_present() {
     assert_eq!(json["data"]["installedBefore"], true);
     assert_eq!(json["data"]["installedAfter"], true);
     assert_eq!(json["data"]["exitCode"], 0);
+}
+
+#[test]
+fn exec_ndjson_emits_single_result_event() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx(
+        &workspace,
+        &[
+            "--output",
+            "ndjson",
+            "exec",
+            "qoder",
+            "--install-policy",
+            "never",
+            "--",
+            "--version",
+        ],
+    );
+
+    assert!(output.status.success());
+    let lines = stdout_json_lines(&output);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["type"], "result");
+    assert_eq!(lines[0]["action"], "exec");
+    assert_eq!(lines[0]["meta"]["mode"], "ndjson");
+    assert_eq!(lines[0]["data"]["data"]["agent"]["name"], "qoder");
 }
 
 #[test]

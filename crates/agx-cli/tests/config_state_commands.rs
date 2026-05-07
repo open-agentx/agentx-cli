@@ -5,6 +5,18 @@ use std::fs;
 use support::{TestWorkspace, run_agx, stdout_json};
 
 #[test]
+fn config_without_action_lists_default_values() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "config"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["action"], "list");
+    assert_eq!(json["data"]["config"]["defaultPackageManager"], "bun");
+    assert_eq!(json["data"]["config"]["networkRetries"], 2);
+}
+
+#[test]
 fn config_set_persists_compatible_quantex_config() {
     let workspace = TestWorkspace::new();
     let output = run_agx(
@@ -82,6 +94,25 @@ fn config_set_persists_numeric_timeout_values() {
 
     let stored = fs::read_to_string(workspace.config_file()).expect("config file should exist");
     assert!(stored.contains("\"networkTimeoutMs\": 15000"));
+}
+
+#[test]
+fn config_set_rejects_invalid_numeric_values() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(
+        &workspace,
+        &["--json", "config", "set", "versionCacheTtlHours", "0"],
+    );
+
+    assert_eq!(output.status.code(), Some(2));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "INVALID_ARGUMENT");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("positive integer")
+    );
 }
 
 #[test]

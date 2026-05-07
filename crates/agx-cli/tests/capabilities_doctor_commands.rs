@@ -2,7 +2,7 @@ mod support;
 
 use std::fs;
 
-use support::{TestWorkspace, run_agx, stdout_json, stdout_text};
+use support::{TestWorkspace, run_agx, stdout_json, stdout_json_lines, stdout_text};
 
 #[test]
 fn capabilities_json_reports_controlled_installer_availability() {
@@ -21,6 +21,7 @@ fn capabilities_json_reports_controlled_installer_availability() {
         "if-missing"
     );
     assert_eq!(json["data"]["outputModes"][2], "ndjson");
+    assert_eq!(json["data"]["agents"][0], "auggie");
 }
 
 #[test]
@@ -32,6 +33,20 @@ fn capabilities_human_output_stays_readable() {
     let stdout = stdout_text(&output);
     assert!(stdout.contains("AGX Capabilities"));
     assert!(stdout.contains("agx capabilities --json"));
+}
+
+#[test]
+fn capabilities_ndjson_emits_single_result_event() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--output", "ndjson", "capabilities"]);
+
+    assert!(output.status.success());
+    let lines = stdout_json_lines(&output);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["type"], "result");
+    assert_eq!(lines[0]["action"], "capabilities");
+    assert_eq!(lines[0]["meta"]["mode"], "ndjson");
+    assert_eq!(lines[0]["data"]["data"]["outputModes"][1], "json");
 }
 
 #[test]
@@ -59,6 +74,27 @@ fn doctor_json_reports_recorded_install_source_and_missing_installers() {
     assert_eq!(json["data"]["checks"][1]["status"], "warn");
     assert_eq!(json["data"]["checks"][2]["name"], "npm");
     assert_eq!(json["data"]["checks"][2]["status"], "warn");
+}
+
+#[test]
+fn doctor_json_exposes_paths() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "doctor"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert!(
+        json["data"]["paths"]["stateFile"]
+            .as_str()
+            .expect("state file should exist")
+            .contains(".quantex")
+    );
+    assert!(
+        json["data"]["paths"]["configFile"]
+            .as_str()
+            .expect("config file should exist")
+            .contains(".quantex")
+    );
 }
 
 #[test]

@@ -1,6 +1,6 @@
 mod support;
 
-use support::{TestWorkspace, run_agx, stdout_json, stdout_text};
+use support::{TestWorkspace, run_agx, stdout_json, stdout_json_lines, stdout_text};
 
 #[test]
 fn commands_json_includes_core_lifecycle_commands() {
@@ -64,6 +64,31 @@ fn commands_json_describes_install_and_inspect_flags() {
 }
 
 #[test]
+fn commands_json_includes_schema_refs_and_stability() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "commands"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let commands = json["data"]["commands"]
+        .as_array()
+        .expect("commands should be an array");
+
+    let update = commands
+        .iter()
+        .find(|command| command["name"] == "update")
+        .expect("update command should exist");
+    let schema = commands
+        .iter()
+        .find(|command| command["name"] == "schema")
+        .expect("schema command should exist");
+
+    assert_eq!(update["outputSchemaRef"], "#/commands/update");
+    assert_eq!(update["stability"], "stable");
+    assert_eq!(schema["summary"], "Return structured output schemas");
+}
+
+#[test]
 fn schema_json_includes_lifecycle_and_workflow_surfaces() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "schema"]);
@@ -114,6 +139,20 @@ fn schema_unknown_target_returns_invalid_argument() {
             .expect("message should exist")
             .contains("Unknown schema target")
     );
+}
+
+#[test]
+fn schema_ndjson_emits_single_result_event() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--output", "ndjson", "schema", "doctor"]);
+
+    assert!(output.status.success());
+    let lines = stdout_json_lines(&output);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["type"], "result");
+    assert_eq!(lines[0]["action"], "schema");
+    assert_eq!(lines[0]["meta"]["mode"], "ndjson");
+    assert_eq!(lines[0]["data"]["data"]["commands"][0]["name"], "doctor");
 }
 
 #[test]

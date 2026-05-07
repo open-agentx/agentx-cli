@@ -80,6 +80,14 @@ pub fn stdout_json(output: &Output) -> serde_json::Value {
     serde_json::from_slice(&output.stdout).expect("stdout should be valid json")
 }
 
+pub fn stdout_json_lines(output: &Output) -> Vec<serde_json::Value> {
+    stdout_text(output)
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("stdout line should be valid json"))
+        .collect()
+}
+
 pub fn stdout_text(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).expect("stdout should be utf8")
 }
