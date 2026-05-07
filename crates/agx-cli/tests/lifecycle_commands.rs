@@ -1,6 +1,10 @@
 mod support;
 
-use support::{TestWorkspace, run_agx, run_agx_with_env, stdout_json, stdout_json_lines};
+use std::fs;
+
+use support::{
+    TestWorkspace, run_agx, run_agx_with_env, stdout_json, stdout_json_lines, stdout_text,
+};
 
 #[test]
 fn install_unknown_agent_returns_agent_not_found() {
@@ -60,6 +64,27 @@ fn install_reports_already_installed_when_binary_exists() {
             .expect("message should exist")
             .contains("already installed")
     );
+}
+
+#[test]
+fn install_successfully_records_managed_install_state() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "install", "qoder"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installed"], true);
+    assert_eq!(json["data"]["changed"], true);
+    assert_eq!(json["data"]["installState"]["installType"], "bun");
+
+    let state = fs::read_to_string(workspace.state_file()).expect("state file should exist");
+    assert!(state.contains("\"qoder\""));
+    assert!(state.contains("\"installType\": \"bun\""));
 }
 
 #[test]
@@ -194,6 +219,27 @@ fn ensure_reports_already_installed_when_binary_exists() {
 }
 
 #[test]
+fn ensure_successfully_records_managed_install_state() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "ensure", "qoder"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installed"], true);
+    assert_eq!(json["data"]["changed"], true);
+    assert_eq!(json["data"]["installState"]["installType"], "bun");
+
+    let state = fs::read_to_string(workspace.state_file()).expect("state file should exist");
+    assert!(state.contains("\"qoder\""));
+    assert!(state.contains("\"installType\": \"bun\""));
+}
+
+#[test]
 fn ensure_explains_when_existing_binary_is_not_tracked() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
@@ -307,6 +353,39 @@ fn uninstall_dry_run_uses_recorded_managed_package() {
             .expect("message should exist")
             .contains("npm uninstall -g @qoder-ai/qodercli")
     );
+}
+
+#[test]
+fn uninstall_successfully_removes_recorded_install_state() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "uninstall", "qoder"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installed"], false);
+    assert_eq!(json["data"]["changed"], true);
+
+    let state = fs::read_to_string(workspace.state_file()).expect("state file should exist");
+    assert!(!state.contains("\"qoder\""));
 }
 
 #[test]
@@ -444,6 +523,34 @@ fn update_all_reports_manual_required_for_unknown_tracked_agent() {
 }
 
 #[test]
+fn update_all_human_output_includes_summary_counts() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "legacy-agent": {
+      "agentName": "legacy-agent",
+      "installType": "bun",
+      "packageName": "@legacy/agent",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx(&workspace, &["update", "--all"]);
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Qoder CLI: manual action required."));
+    assert!(stdout.contains("legacy-agent: manual action required."));
+    assert!(stdout.contains("Summary: manual 2"));
+}
+
+#[test]
 fn update_ndjson_emits_single_result_event() {
     let workspace = TestWorkspace::new();
     workspace.write_state_bytes(
@@ -468,11 +575,16 @@ fn update_ndjson_emits_single_result_event() {
 
     assert!(output.status.success());
     let lines = stdout_json_lines(&output);
-    assert_eq!(lines.len(), 1);
-    assert_eq!(lines[0]["type"], "result");
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines[0]["type"], "started");
     assert_eq!(lines[0]["action"], "update");
-    assert_eq!(lines[0]["meta"]["mode"], "ndjson");
-    assert_eq!(lines[0]["data"]["data"]["results"][0]["status"], "planned");
+    assert_eq!(lines[0]["data"]["scope"], "single");
+    assert_eq!(lines[1]["type"], "progress");
+    assert_eq!(lines[1]["data"]["status"], "planned");
+    assert_eq!(lines[2]["type"], "result");
+    assert_eq!(lines[2]["action"], "update");
+    assert_eq!(lines[2]["meta"]["mode"], "ndjson");
+    assert_eq!(lines[2]["data"]["data"]["results"][0]["status"], "planned");
 }
 
 #[test]
@@ -569,8 +681,45 @@ fn update_all_includes_tracked_script_installs_via_self_update() {
         .iter()
         .find(|entry| entry["name"] == "qoder")
         .expect("qoder result should exist");
-    assert_eq!(result["status"], "updated");
+    assert_eq!(result["status"], "up-to-date");
     assert_eq!(result["strategy"], "self-update");
+}
+
+#[test]
+fn update_all_reports_tracked_script_installs_as_up_to_date_when_version_does_not_change() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("agent");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "cursor": {
+      "agentName": "cursor",
+      "installType": "script",
+      "command": "agent update"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "--all"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let result = json["data"]["results"]
+        .as_array()
+        .expect("results should be an array")
+        .iter()
+        .find(|entry| entry["name"] == "cursor")
+        .expect("cursor result should exist");
+    assert_eq!(result["status"], "up-to-date");
+    assert_eq!(result["installedVersion"], "0.1.0");
+    assert_eq!(result["latestVersion"], "0.1.0");
 }
 
 #[test]
@@ -591,6 +740,37 @@ fn update_single_uses_managed_update_for_untracked_known_package_agents() {
     let json = stdout_json(&output);
     assert_eq!(json["data"]["results"][0]["status"], "updated");
     assert_eq!(json["data"]["results"][0]["strategy"], "managed/bun");
+}
+
+#[test]
+fn update_single_self_update_reports_up_to_date_when_version_does_not_change() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("agent");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "cursor": {
+      "agentName": "cursor",
+      "installType": "script",
+      "command": "agent update"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "cursor"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["results"][0]["status"], "up-to-date");
+    assert_eq!(json["data"]["results"][0]["installedVersion"], "0.1.0");
+    assert_eq!(json["data"]["results"][0]["latestVersion"], "0.1.0");
 }
 
 #[test]

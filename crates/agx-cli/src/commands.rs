@@ -661,6 +661,13 @@ fn upgrade_command(
 #[allow(clippy::too_many_lines)]
 fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> CommandResult {
     if all {
+        let _ = crate::output::emit_ndjson_event(
+            "update",
+            "started",
+            serde_json::json!({ "scope": "all" }),
+            Some(CommandTarget::agent("all")),
+            context,
+        );
         let mut results = Vec::new();
         for agent in agents::all_agents() {
             let inspection = resolved_agent_inspection(*agent);
@@ -671,7 +678,7 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
             }
 
             if inspection.installed && installed_state.is_none() {
-                results.push(package_manager::UpdateResult {
+                let result = package_manager::UpdateResult {
                     display_name: agent.display_name.to_string(),
                     hint: Some(format!(
                         "Use `agx inspect {} --json` to confirm the source, then reinstall through AGX if you want `agx update --all` to manage it.",
@@ -687,14 +694,16 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                     resource: None,
                     status: "manual-required",
                     strategy: Some("manual-hint".to_string()),
-                });
+                };
+                emit_update_progress(&result, context);
+                results.push(result);
                 continue;
             }
 
             if inspection.installed_version.is_some()
                 && inspection.installed_version == inspection.latest_version
             {
-                results.push(package_manager::UpdateResult {
+                let result = package_manager::UpdateResult {
                     display_name: agent.display_name.to_string(),
                     hint: None,
                     installed_version: inspection.installed_version,
@@ -704,7 +713,9 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                     resource: None,
                     status: "up-to-date",
                     strategy: Some(inspection.update_label.clone()),
-                });
+                };
+                emit_update_progress(&result, context);
+                results.push(result);
                 continue;
             }
 
@@ -712,9 +723,12 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                 && agent.npm_package.is_none()
                 && agents::self_update_commands(*agent).is_empty()
             {
-                results.push(package_manager::UpdateResult {
+                let result = package_manager::UpdateResult {
                     display_name: agent.display_name.to_string(),
-                    hint: Some(format!("Check {} for the recommended update path.", agent.homepage)),
+                    hint: Some(format!(
+                        "Check {} for the recommended update path.",
+                        agent.homepage
+                    )),
                     installed_version: inspection.installed_version,
                     latest_version: inspection.latest_version,
                     name: agent.name.to_string(),
@@ -725,16 +739,19 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                     resource: None,
                     status: "manual-required",
                     strategy: Some("manual-hint".to_string()),
-                });
+                };
+                emit_update_progress(&result, context);
+                results.push(result);
                 continue;
             }
 
-            results.push(
+            let result = normalize_update_result(
+                *agent,
                 package_manager::update_agent(
                     *agent,
                     installed_state.as_ref(),
-                    inspection.installed_version,
-                    inspection.latest_version,
+                    inspection.installed_version.clone(),
+                    inspection.latest_version.clone(),
                     context,
                 )
                 .unwrap_or_else(|error| package_manager::UpdateResult {
@@ -752,12 +769,15 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                     },
                     strategy: Some(inspection.update_label.clone()),
                 }),
+                inspection.installed_version.as_deref(),
             );
+            emit_update_progress(&result, context);
+            results.push(result);
         }
 
         for installed_state in crate::state::load_state().installed_agents.into_values() {
             if agents::resolve_agent(&installed_state.agent_name).is_none() {
-                results.push(package_manager::UpdateResult {
+                let result = package_manager::UpdateResult {
                     display_name: installed_state.agent_name.clone(),
                     hint: None,
                     installed_version: None,
@@ -767,7 +787,9 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                     resource: None,
                     status: "manual-required",
                     strategy: None,
-                });
+                };
+                emit_update_progress(&result, context);
+                results.push(result);
             }
         }
 
@@ -808,6 +830,14 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
         return agent_not_found_result("update", agent_name, context);
     };
 
+    let _ = crate::output::emit_ndjson_event(
+        "update",
+        "started",
+        serde_json::json!({ "scope": "single", "agent": agent.name }),
+        Some(CommandTarget::agent(agent.name)),
+        context,
+    );
+
     let inspection = resolved_agent_inspection(agent);
     let installed_state = crate::state::get_installed_agent_state(agent.name);
     if !inspection.installed && installed_state.is_none() {
@@ -825,20 +855,22 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
     if inspection.installed_version.is_some()
         && inspection.installed_version == inspection.latest_version
     {
+        let result = package_manager::UpdateResult {
+            display_name: agent.display_name.to_string(),
+            hint: None,
+            installed_version: inspection.installed_version,
+            latest_version: inspection.latest_version,
+            name: agent.name.to_string(),
+            message: None,
+            resource: None,
+            status: "up-to-date",
+            strategy: Some(inspection.update_label.clone()),
+        };
+        emit_update_progress(&result, context);
         return CommandResult::success(
             "update",
             UpdateData {
-                results: vec![package_manager::UpdateResult {
-                    display_name: agent.display_name.to_string(),
-                    hint: None,
-                    installed_version: inspection.installed_version,
-                    latest_version: inspection.latest_version,
-                    name: agent.name.to_string(),
-                    message: None,
-                    resource: None,
-                    status: "up-to-date",
-                    strategy: Some(inspection.update_label.clone()),
-                }],
+                results: vec![result],
                 scope: "single",
             },
             CommandTarget::agent(agent.name),
@@ -849,8 +881,8 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
     match package_manager::update_agent(
         agent,
         installed_state.as_ref(),
-        inspection.installed_version,
-        inspection.latest_version,
+        inspection.installed_version.clone(),
+        inspection.latest_version.clone(),
         context,
     ) {
         Ok(result) if matches!(result.status, "failed" | "locked") => {
@@ -878,7 +910,15 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
         Ok(result) => CommandResult::success(
             "update",
             UpdateData {
-                results: vec![result],
+                results: vec![{
+                    let normalized = normalize_update_result(
+                        agent,
+                        result,
+                        inspection.installed_version.as_deref(),
+                    );
+                    emit_update_progress(&normalized, context);
+                    normalized
+                }],
                 scope: "single",
             },
             CommandTarget::agent(agent.name),
@@ -888,6 +928,46 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
             CommandResult::error("update", error, CommandTarget::agent(agent.name), context)
         }
     }
+}
+
+fn emit_update_progress(result: &package_manager::UpdateResult, context: &CliContext) {
+    let _ = crate::output::emit_ndjson_event(
+        "update",
+        "progress",
+        result,
+        Some(CommandTarget::agent(result.name.clone())),
+        context,
+    );
+}
+
+fn normalize_update_result(
+    agent: AgentDefinition,
+    mut result: package_manager::UpdateResult,
+    installed_version_before: Option<&str>,
+) -> package_manager::UpdateResult {
+    if result.status != "updated" || result.strategy.as_deref() != Some("self-update") {
+        return result;
+    }
+
+    let Some(previous_version) = installed_version_before else {
+        return result;
+    };
+    let Some(binary_path) = inspection::find_binary_in_path(agent.binary_name) else {
+        return result;
+    };
+    let Some(observed_version) = inspection::probe_binary_version(&binary_path) else {
+        return result;
+    };
+
+    if observed_version == previous_version {
+        result.installed_version = Some(observed_version.clone());
+        result.latest_version = Some(observed_version);
+        result.status = "up-to-date";
+    } else {
+        result.latest_version = Some(observed_version);
+    }
+
+    result
 }
 
 fn info_command(agent_name: &str, context: &CliContext) -> CommandResult {

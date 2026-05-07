@@ -21,7 +21,9 @@ pub struct AgentInspection {
 pub fn inspect_agent(agent: AgentDefinition) -> AgentInspection {
     let binary_path = find_binary_in_path(agent.binary_name);
     let installed = binary_path.is_some();
-    let installed_version = binary_path.as_ref().and_then(get_installed_version);
+    let installed_version = binary_path
+        .as_ref()
+        .and_then(|path| probe_binary_version(path));
     let latest_version = agent.npm_package.and_then(get_latest_version);
 
     AgentInspection {
@@ -54,7 +56,7 @@ pub fn find_binary_in_path(binary_name: &str) -> Option<PathBuf> {
     })
 }
 
-fn get_installed_version(binary_path: &PathBuf) -> Option<String> {
+pub fn probe_binary_version(binary_path: &Path) -> Option<String> {
     let output = Command::new(binary_path)
         .args(version_probe_args(binary_path))
         .output()

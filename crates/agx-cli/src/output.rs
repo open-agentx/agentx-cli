@@ -88,6 +88,18 @@ pub struct CommandResult {
     pub warnings: Vec<CommandWarning>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NdjsonEvent<T> {
+    action: String,
+    data: T,
+    meta: CommandMeta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target: Option<CommandTarget>,
+    #[serde(rename = "type")]
+    kind: &'static str,
+}
+
 impl CommandResult {
     pub fn success(
         action: impl Into<String>,
@@ -202,6 +214,36 @@ pub fn emit_result(result: &CommandResult, context: &CliContext) -> Result<(), s
             Ok(())
         }
     }
+}
+
+pub fn emit_ndjson_event(
+    action: &str,
+    kind: &'static str,
+    data: impl Serialize,
+    target: Option<CommandTarget>,
+    context: &CliContext,
+) -> Result<(), serde_json::Error> {
+    if !matches!(context.output_mode, OutputMode::Ndjson) {
+        return Ok(());
+    }
+
+    println!(
+        "{}",
+        serde_json::to_string(&NdjsonEvent {
+            action: action.to_string(),
+            data,
+            meta: CommandMeta {
+                mode: "ndjson",
+                run_id: context.run_id.clone(),
+                schema_version: SCHEMA_VERSION,
+                timestamp: current_timestamp(),
+                version: env!("CARGO_PKG_VERSION"),
+            },
+            target,
+            kind,
+        })?
+    );
+    Ok(())
 }
 
 fn create_meta(context: &CliContext) -> CommandMeta {
@@ -808,6 +850,55 @@ fn render_update(result: &CommandResult) {
                 _ => println!("{result}"),
             }
         }
+
+        if results.len() > 1 {
+            render_update_summary(results);
+        }
+    }
+}
+
+fn render_update_summary(results: &[Value]) {
+    let mut updated = 0;
+    let mut up_to_date = 0;
+    let mut manual = 0;
+    let mut failed = 0;
+    let mut locked = 0;
+    let mut planned = 0;
+
+    for result in results {
+        match result["status"].as_str().unwrap_or_default() {
+            "updated" => updated += 1,
+            "up-to-date" => up_to_date += 1,
+            "manual-required" => manual += 1,
+            "failed" => failed += 1,
+            "locked" => locked += 1,
+            "planned" => planned += 1,
+            _ => {}
+        }
+    }
+
+    let mut parts = Vec::new();
+    if updated > 0 {
+        parts.push(format!("updated {updated}"));
+    }
+    if up_to_date > 0 {
+        parts.push(format!("up to date {up_to_date}"));
+    }
+    if manual > 0 {
+        parts.push(format!("manual {manual}"));
+    }
+    if failed > 0 {
+        parts.push(format!("failed {failed}"));
+    }
+    if locked > 0 {
+        parts.push(format!("locked {locked}"));
+    }
+    if planned > 0 {
+        parts.push(format!("planned {planned}"));
+    }
+
+    if !parts.is_empty() {
+        println!("Summary: {}", parts.join(", "));
     }
 }
 
