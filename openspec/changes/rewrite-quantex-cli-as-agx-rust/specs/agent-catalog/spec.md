@@ -36,3 +36,17 @@ AGX SHALL resolve agents by canonical names and documented aliases.
 - WHEN the user runs an AGX lifecycle command with that alias
 - THEN AGX resolves the same canonical agent entry
 - AND lifecycle behavior uses the canonical agent state key
+
+### Requirement: Doctor diagnostics MUST surface self-update remediation for untracked agents
+
+AGX SHALL report machine-actionable self-update guidance when an installed agent can update itself but AGX is not tracking the install source.
+
+#### Scenario: Doctor inspects an untracked self-updating agent
+
+- GIVEN an agent binary is available on PATH
+- AND AGX is not tracking that install in compatible state
+- AND the agent definition exposes one or more self-update commands
+- WHEN the user runs `agx doctor --json`
+- THEN AGX returns an `AGENT_MANUAL_UPDATE_REQUIRED` issue
+- AND the issue includes the canonical agent name
+- AND the issue includes the suggested self-update command list

@@ -152,6 +152,26 @@ fn doctor_json_reports_untracked_agent_issue() {
 }
 
 #[test]
+fn doctor_json_reports_self_update_guidance_for_untracked_self_updating_agent() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("claude");
+
+    let output = run_agx(&workspace, &["--json", "doctor"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let issues = json["data"]["issues"]
+        .as_array()
+        .expect("issues should be an array");
+    assert!(issues.iter().any(|issue| {
+        issue["code"] == "AGENT_MANUAL_UPDATE_REQUIRED"
+            && issue["subject"]["name"] == "claude"
+            && issue["suggestedAction"] == "run-agent-self-update"
+            && issue["suggestedCommands"][0] == "claude update"
+    }));
+}
+
+#[test]
 fn doctor_json_uses_source_build_heuristic_without_recorded_state() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "doctor"]);

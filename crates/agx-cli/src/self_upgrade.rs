@@ -284,6 +284,10 @@ fn upgrade_managed(
     let command: Vec<String> = std::iter::once(program.to_string()).chain(args).collect();
 
     if context.dry_run {
+        let status = latest_version
+            .as_deref()
+            .filter(|latest| is_version_newer(latest, env!("CARGO_PKG_VERSION")))
+            .map_or("planned", |_| "update-available");
         return Ok(UpgradeData {
             channel: Some(channel),
             command,
@@ -300,7 +304,7 @@ fn upgrade_managed(
                 "Dry run: would run managed self-upgrade through {program}."
             )),
             package_name: AGX_PACKAGE_NAME,
-            status: "planned",
+            status,
             verified_version: None,
         });
     }

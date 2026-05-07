@@ -493,6 +493,14 @@ fn doctor_issues(
     }
 
     for agent in agents {
+        let Some(agent_definition) = agents::all_agents()
+            .iter()
+            .find(|candidate| candidate.display_name == agent.display_name)
+            .copied()
+        else {
+            continue;
+        };
+
         if agent.lifecycle == "unmanaged" {
             issues.push(DoctorIssue {
                 blocking: false,
@@ -506,25 +514,37 @@ fn doctor_issues(
                 severity: "warning",
                 subject: IssueSubject {
                     kind: "agent",
-                    name: Some(
-                        agents::all_agents()
-                            .iter()
-                            .find(|candidate| candidate.display_name == agent.display_name)
-                            .map_or_else(String::new, |candidate| candidate.name.to_string()),
-                    ),
+                    name: Some(agent_definition.name.to_string()),
                 },
                 suggested_action: "inspect-agent-install-source",
-                suggested_commands: agents::all_agents()
-                    .iter()
-                    .find(|candidate| candidate.display_name == agent.display_name)
-                    .map(|candidate| {
-                        vec![
-                            format!("agx inspect {} --json", candidate.name),
-                            format!("agx install {}", candidate.name),
-                        ]
-                    })
-                    .unwrap_or_default(),
+                suggested_commands: vec![
+                    format!("agx inspect {} --json", agent_definition.name),
+                    format!("agx install {}", agent_definition.name),
+                ],
             });
+
+            if !agents::self_update_commands(agent_definition).is_empty() {
+                issues.push(DoctorIssue {
+                    blocking: false,
+                    category: "agent",
+                    code: "AGENT_MANUAL_UPDATE_REQUIRED",
+                    docs_ref: Some("docs/runbooks/quantex-troubleshooting.md"),
+                    message: format!(
+                        "{} can update itself, but AGX cannot verify or manage that untracked install automatically.",
+                        agent.display_name
+                    ),
+                    severity: "warning",
+                    subject: IssueSubject {
+                        kind: "agent",
+                        name: Some(agent_definition.name.to_string()),
+                    },
+                    suggested_action: "run-agent-self-update",
+                    suggested_commands: agents::self_update_commands(agent_definition)
+                        .into_iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                });
+            }
         }
     }
 

@@ -113,6 +113,33 @@ fn upgrade_dry_run_uses_recorded_npm_install_source() {
 }
 
 #[test]
+fn upgrade_dry_run_reports_update_available_without_invoking_upgrade() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "bun"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "--dry-run", "upgrade"],
+        &[("AGX_TEST_LATEST_VERSION", "0.2.0")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installSource"], "bun");
+    assert_eq!(json["data"]["status"], "update-available");
+    assert_eq!(json["warnings"][0]["code"], "DRY_RUN");
+    assert_eq!(json["data"]["command"][0], "bun");
+}
+
+#[test]
 fn upgrade_rejects_source_build_without_recorded_install_source() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "upgrade"]);

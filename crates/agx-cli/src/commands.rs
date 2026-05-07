@@ -641,6 +641,9 @@ fn upgrade_command(
                     ),
                 });
             }
+            if context.dry_run {
+                command_result.warnings.push(dry_run_warning());
+            }
             command_result
         }
         Err(error) => CommandResult::error_with_data(

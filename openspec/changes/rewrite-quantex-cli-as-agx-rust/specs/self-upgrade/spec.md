@@ -47,6 +47,19 @@ AGX SHALL warn when the selected managed registry lags behind upstream npm metad
 - THEN AGX returns a `MIRROR_LAG` warning in structured output
 - AND human output explains that the selected registry currently installs an older version than upstream npm
 
+### Requirement: Managed self-upgrade dry-run MUST preserve update intent
+
+AGX SHALL report whether a managed self-upgrade is available even when `--dry-run` prevents execution.
+
+#### Scenario: Dry-run managed self-upgrade with a newer version available
+
+- GIVEN AGX is using npm or Bun as its self-upgrade channel
+- AND AGX resolves a latest version newer than the current AGX version
+- WHEN the user runs `agx upgrade --dry-run`
+- THEN AGX returns status `update-available`
+- AND includes the planned managed upgrade command
+- AND includes a `DRY_RUN` warning instead of executing the upgrade
+
 ### Requirement: Binary self-upgrade MUST verify checksum
 
 AGX standalone binary self-upgrade SHALL verify the downloaded binary checksum before replacement.
