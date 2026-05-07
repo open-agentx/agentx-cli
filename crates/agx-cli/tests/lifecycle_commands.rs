@@ -466,6 +466,150 @@ fn update_single_dry_run_uses_recorded_install_source() {
 }
 
 #[test]
+fn update_single_npm_latest_major_uses_npm_install_latest() {
+    let workspace = TestWorkspace::new();
+    let capture_path = workspace.root().join("commands.log");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let capture = capture_path.to_string_lossy().into_owned();
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "qoder"],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_CAPTURE_COMMAND_PATH", &capture),
+            ("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "0.2.0"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let captured = fs::read_to_string(capture_path).expect("capture file should exist");
+    assert!(captured.contains("npm install -g @qoder-ai/qodercli@latest"));
+}
+
+#[test]
+fn update_single_npm_respect_semver_uses_npm_update() {
+    let workspace = TestWorkspace::new();
+    let capture_path = workspace.root().join("commands.log");
+    workspace.write_config_bytes(br#"{"npmBunUpdateStrategy":"respect-semver"}"#);
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let capture = capture_path.to_string_lossy().into_owned();
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "qoder"],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_CAPTURE_COMMAND_PATH", &capture),
+            ("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "0.2.0"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let captured = fs::read_to_string(capture_path).expect("capture file should exist");
+    assert!(captured.contains("npm update -g @qoder-ai/qodercli"));
+    assert!(!captured.contains("@latest"));
+}
+
+#[test]
+fn update_single_bun_latest_major_uses_bun_update_latest() {
+    let workspace = TestWorkspace::new();
+    let capture_path = workspace.root().join("commands.log");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let capture = capture_path.to_string_lossy().into_owned();
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "qoder"],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_CAPTURE_COMMAND_PATH", &capture),
+            ("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "0.2.0"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let captured = fs::read_to_string(capture_path).expect("capture file should exist");
+    assert!(captured.contains("bun update -g --latest @qoder-ai/qodercli"));
+}
+
+#[test]
+fn update_single_bun_respect_semver_uses_bun_update_without_latest() {
+    let workspace = TestWorkspace::new();
+    let capture_path = workspace.root().join("commands.log");
+    workspace.write_config_bytes(br#"{"npmBunUpdateStrategy":"respect-semver"}"#);
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let capture = capture_path.to_string_lossy().into_owned();
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "qoder"],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_CAPTURE_COMMAND_PATH", &capture),
+            ("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "0.2.0"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let captured = fs::read_to_string(capture_path).expect("capture file should exist");
+    assert!(captured.contains("bun update -g @qoder-ai/qodercli"));
+    assert!(!captured.contains("--latest"));
+}
+
+#[test]
 fn update_requires_agent_name_without_all() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "update"]);

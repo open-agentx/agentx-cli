@@ -1,4 +1,5 @@
 use std::process::Command;
+use std::{fs, path::PathBuf};
 
 use crate::agents::AgentDefinition;
 use crate::config;
@@ -274,7 +275,7 @@ fn update_managed_agent(
         });
     };
 
-    let command = install_command(install_type, package_name);
+    let command = update_command(install_type, package_name);
     let strategy = Some(format!("managed/{install_type}"));
 
     if context.dry_run {
@@ -393,6 +394,17 @@ fn preferred_package_manager() -> &'static str {
     }
 }
 
+fn npm_bun_update_strategy() -> &'static str {
+    let config = config::load_effective_config();
+    match config
+        .get("npmBunUpdateStrategy")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some("respect-semver") => "respect-semver",
+        _ => "latest-major",
+    }
+}
+
 fn install_command(install_type: &str, package: &str) -> Vec<String> {
     match install_type {
         "npm" => vec![
@@ -405,6 +417,37 @@ fn install_command(install_type: &str, package: &str) -> Vec<String> {
             "bun".to_string(),
             "add".to_string(),
             "-g".to_string(),
+            package.to_string(),
+        ],
+    }
+}
+
+fn update_command(install_type: &str, package: &str) -> Vec<String> {
+    let strategy = npm_bun_update_strategy();
+    match (install_type, strategy) {
+        ("npm", "respect-semver") => vec![
+            "npm".to_string(),
+            "update".to_string(),
+            "-g".to_string(),
+            package.to_string(),
+        ],
+        ("npm", _) => vec![
+            "npm".to_string(),
+            "install".to_string(),
+            "-g".to_string(),
+            format!("{package}@latest"),
+        ],
+        ("bun", "respect-semver") => vec![
+            "bun".to_string(),
+            "update".to_string(),
+            "-g".to_string(),
+            package.to_string(),
+        ],
+        _ => vec![
+            "bun".to_string(),
+            "update".to_string(),
+            "-g".to_string(),
+            "--latest".to_string(),
             package.to_string(),
         ],
     }
@@ -478,6 +521,17 @@ fn infer_existing_install_state(
 }
 
 fn run_external_command(command: &[String], error_code: AgxErrorCode) -> Result<(), AgxError> {
+    if let Ok(path) = std::env::var("AGX_TEST_CAPTURE_COMMAND_PATH") {
+        let path = PathBuf::from(path);
+        let mut existing = fs::read_to_string(&path).unwrap_or_default();
+        if !existing.is_empty() && !existing.ends_with('\n') {
+            existing.push('\n');
+        }
+        existing.push_str(&command.join(" "));
+        existing.push('\n');
+        let _ = fs::write(path, existing);
+    }
+
     if std::env::var("AGX_TEST_ALLOW_EXTERNAL_SUCCESS").as_deref() == Ok("1") {
         return Ok(());
     }
