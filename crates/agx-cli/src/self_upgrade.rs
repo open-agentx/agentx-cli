@@ -1,26 +1,42 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use reqwest::blocking::Client;
 use serde::Serialize;
 
+use crate::config;
 use crate::context::CliContext;
 use crate::errors::{AgxError, AgxErrorCode};
 use crate::state;
 
 const AGX_PACKAGE_NAME: &str = "agxctl";
+const OFFICIAL_NPM_REGISTRY: &str = "https://registry.npmjs.org";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpgradeData {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channel: Option<SelfUpdateChannel>,
     pub command: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_version: Option<String>,
     pub dry_run: bool,
     pub install_source: InstallSourceKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     pub package_name: &'static str,
     pub status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verified_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SelfUpdateChannel {
+    Stable,
+    Beta,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -33,14 +49,52 @@ pub enum InstallSourceKind {
     Unknown,
 }
 
-pub fn upgrade_self(context: &CliContext) -> Result<UpgradeData, AgxError> {
+pub fn upgrade_self(
+    context: &CliContext,
+    requested_channel: Option<SelfUpdateChannel>,
+    check: bool,
+) -> Result<UpgradeData, AgxError> {
     let executable = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("agx"));
     let install_source = detect_install_source(&executable);
+    let channel = resolve_channel(requested_channel);
+    let current_version = Some(env!("CARGO_PKG_VERSION").to_string());
+    let latest_version = resolve_latest_version(channel);
+
+    if check {
+        let Some(latest_version) = latest_version else {
+            return Err(AgxError::new(
+                AgxErrorCode::NetworkError,
+                "Unable to determine the latest AGX version.",
+            ));
+        };
+
+        let status = if is_version_newer(&latest_version, env!("CARGO_PKG_VERSION")) {
+            "update-available"
+        } else {
+            "up-to-date"
+        };
+
+        return Ok(UpgradeData {
+            channel: Some(channel),
+            command: Vec::new(),
+            current_version,
+            dry_run: context.dry_run,
+            install_source,
+            latest_version: Some(latest_version),
+            message: None,
+            package_name: AGX_PACKAGE_NAME,
+            status,
+            verified_version: None,
+        });
+    }
+
     match install_source {
         InstallSourceKind::Npm => {
-            upgrade_managed(context, "npm", &["install", "-g", AGX_PACKAGE_NAME])
+            upgrade_managed(context, "npm", channel, current_version, latest_version)
         }
-        InstallSourceKind::Bun => upgrade_managed(context, "bun", &["add", "-g", AGX_PACKAGE_NAME]),
+        InstallSourceKind::Bun => {
+            upgrade_managed(context, "bun", channel, current_version, latest_version)
+        }
         InstallSourceKind::Standalone => Err(AgxError::new(
             AgxErrorCode::ManualActionRequired,
             "Standalone self-upgrade requires release manifest and checksum metadata.",
@@ -59,21 +113,40 @@ pub fn upgrade_self(context: &CliContext) -> Result<UpgradeData, AgxError> {
 fn upgrade_managed(
     context: &CliContext,
     program: &'static str,
-    args: &[&'static str],
+    channel: SelfUpdateChannel,
+    current_version: Option<String>,
+    latest_version: Option<String>,
 ) -> Result<UpgradeData, AgxError> {
-    let command: Vec<String> = std::iter::once(program.to_string())
-        .chain(args.iter().map(|arg| (*arg).to_string()))
-        .collect();
+    let version_tag = if channel == SelfUpdateChannel::Beta {
+        "beta"
+    } else {
+        "latest"
+    };
+    let package_spec = format!("{AGX_PACKAGE_NAME}@{version_tag}");
+    let args = if program == "npm" {
+        vec![
+            "install".to_string(),
+            "-g".to_string(),
+            package_spec.clone(),
+        ]
+    } else {
+        vec!["add".to_string(), "-g".to_string(), package_spec.clone()]
+    };
+
+    let command: Vec<String> = std::iter::once(program.to_string()).chain(args).collect();
 
     if context.dry_run {
         return Ok(UpgradeData {
+            channel: Some(channel),
             command,
+            current_version,
             dry_run: true,
             install_source: if program == "npm" {
                 InstallSourceKind::Npm
             } else {
                 InstallSourceKind::Bun
             },
+            latest_version,
             message: Some(format!(
                 "Dry run: would run managed self-upgrade through {program}."
             )),
@@ -86,13 +159,16 @@ fn upgrade_managed(
     run_external_command(&command)?;
     let verified_version = verify_current_version();
     Ok(UpgradeData {
+        channel: Some(channel),
         command,
+        current_version,
         dry_run: false,
         install_source: if program == "npm" {
             InstallSourceKind::Npm
         } else {
             InstallSourceKind::Bun
         },
+        latest_version,
         message: None,
         package_name: AGX_PACKAGE_NAME,
         status: "upgraded",
@@ -167,4 +243,48 @@ fn verify_current_version() -> Option<String> {
         .split_whitespace()
         .last()
         .map(ToString::to_string)
+}
+
+fn resolve_channel(requested_channel: Option<SelfUpdateChannel>) -> SelfUpdateChannel {
+    if let Some(requested_channel) = requested_channel {
+        return requested_channel;
+    }
+
+    match config::get_config_value("selfUpdateChannel").as_str() {
+        Some("beta") => SelfUpdateChannel::Beta,
+        _ => SelfUpdateChannel::Stable,
+    }
+}
+
+fn resolve_latest_version(channel: SelfUpdateChannel) -> Option<String> {
+    if let Ok(version) = std::env::var("AGX_TEST_LATEST_VERSION") {
+        return Some(version);
+    }
+
+    let registry = config::get_config_value("selfUpdateRegistry")
+        .as_str()
+        .unwrap_or(OFFICIAL_NPM_REGISTRY)
+        .trim_end_matches('/')
+        .to_string();
+    let dist_tag = if channel == SelfUpdateChannel::Beta {
+        "beta"
+    } else {
+        "latest"
+    };
+    let url = format!("{registry}/{AGX_PACKAGE_NAME}");
+    let response = Client::builder().build().ok()?.get(url).send().ok()?;
+    let payload = response.json::<serde_json::Value>().ok()?;
+    payload["dist-tags"][dist_tag]
+        .as_str()
+        .map(ToString::to_string)
+}
+
+fn is_version_newer(candidate: &str, current: &str) -> bool {
+    match (
+        semver::Version::parse(candidate),
+        semver::Version::parse(current),
+    ) {
+        (Ok(candidate), Ok(current)) => candidate > current,
+        _ => candidate != current,
+    }
 }

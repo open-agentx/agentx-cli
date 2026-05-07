@@ -70,6 +70,13 @@ impl TryFrom<&Cli> for CliContext {
             ));
         }
 
+        if cli.json && cli.output.is_some() {
+            return Err(AgxError::new(
+                AgxErrorCode::InvalidArgument,
+                "Cannot combine --json with --output.",
+            ));
+        }
+
         let output_mode = if cli.json {
             OutputMode::Json
         } else {

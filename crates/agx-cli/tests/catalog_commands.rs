@@ -82,10 +82,28 @@ fn commands_json_includes_schema_refs_and_stability() {
         .iter()
         .find(|command| command["name"] == "schema")
         .expect("schema command should exist");
+    let upgrade = commands
+        .iter()
+        .find(|command| command["name"] == "upgrade")
+        .expect("upgrade command should exist");
 
     assert_eq!(update["outputSchemaRef"], "#/commands/update");
     assert_eq!(update["stability"], "stable");
     assert_eq!(schema["summary"], "Return structured output schemas");
+    assert!(
+        upgrade["flags"]
+            .as_array()
+            .expect("upgrade flags should be an array")
+            .iter()
+            .any(|flag| flag == "--channel")
+    );
+    assert!(
+        upgrade["flags"]
+            .as_array()
+            .expect("upgrade flags should be an array")
+            .iter()
+            .any(|flag| flag == "--check")
+    );
 }
 
 #[test]
@@ -153,6 +171,29 @@ fn schema_ndjson_emits_single_result_event() {
     assert_eq!(lines[0]["action"], "schema");
     assert_eq!(lines[0]["meta"]["mode"], "ndjson");
     assert_eq!(lines[0]["data"]["data"]["commands"][0]["name"], "doctor");
+}
+
+#[test]
+fn schema_upgrade_reflects_channel_and_version_fields() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "schema", "upgrade"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let schema = &json["data"]["commands"][0]["dataSchema"]["properties"];
+    assert!(schema.as_array().is_some());
+    let properties = schema.as_array().expect("properties should be an array");
+    assert!(properties.iter().any(|item| item["name"] == "channel"));
+    assert!(
+        properties
+            .iter()
+            .any(|item| item["name"] == "currentVersion")
+    );
+    assert!(
+        properties
+            .iter()
+            .any(|item| item["name"] == "latestVersion")
+    );
 }
 
 #[test]

@@ -34,7 +34,14 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
         Command::Resolve { agent } => resolve_command(agent, context),
         Command::Schema { command } => schema_command(command.as_deref(), context),
         Command::Uninstall { agent } => uninstall_command(agent, context),
-        Command::Upgrade => upgrade_command(context),
+        Command::Upgrade { channel, check } => upgrade_command(
+            channel.map(|channel| match channel {
+                crate::cli::SelfUpdateChannelArg::Stable => self_upgrade::SelfUpdateChannel::Stable,
+                crate::cli::SelfUpdateChannelArg::Beta => self_upgrade::SelfUpdateChannel::Beta,
+            }),
+            *check,
+            context,
+        ),
         Command::Update { agent, all } => update_command(agent.as_deref(), *all, context),
     }
 }
@@ -49,6 +56,18 @@ fn doctor_command(context: &CliContext) -> CommandResult {
 }
 
 fn shortcut_exec_command(args: &[String], context: &CliContext) -> CommandResult {
+    if !matches!(context.output_mode, crate::context::OutputMode::Human) {
+        return CommandResult::error(
+            "exec",
+            AgxError::new(
+                AgxErrorCode::InvalidArgument,
+                "Structured output is not supported for shortcut agent execution yet. Use `agx exec <agent>` instead.",
+            ),
+            CommandTarget::agent(""),
+            context,
+        );
+    }
+
     let Some((agent_name, agent_args)) = args.split_first() else {
         return CommandResult::error(
             "exec",
@@ -509,17 +528,24 @@ fn uninstall_command(agent_name: &str, context: &CliContext) -> CommandResult {
     )
 }
 
-fn upgrade_command(context: &CliContext) -> CommandResult {
-    match self_upgrade::upgrade_self(context) {
-        Ok(result) => CommandResult::success(
-            "upgrade",
-            result,
-            CommandTarget {
+fn upgrade_command(
+    channel: Option<self_upgrade::SelfUpdateChannel>,
+    check: bool,
+    context: &CliContext,
+) -> CommandResult {
+    match self_upgrade::upgrade_self(context, channel, check) {
+        Ok(result) => {
+            let target = CommandTarget {
                 kind: crate::output::TargetKind::SelfTarget,
                 name: Some("agx".to_string()),
-            },
-            context,
-        ),
+            };
+            if check && result.status == "update-available" {
+                return CommandResult::success_with_exit_code(
+                    "upgrade", result, target, context, 1,
+                );
+            }
+            CommandResult::success("upgrade", result, target, context)
+        }
         Err(error) => CommandResult::error(
             "upgrade",
             error,
@@ -797,6 +823,8 @@ fn command_catalog() -> Vec<CommandDescriptor> {
         },
         CommandDescriptor {
             flags: vec![
+                "--channel",
+                "--check",
                 "--json",
                 "--output",
                 "--yes",
@@ -814,6 +842,7 @@ fn command_catalog() -> Vec<CommandDescriptor> {
         },
         CommandDescriptor {
             flags: vec![
+                "--install",
                 "--install-policy",
                 "--json",
                 "--output",
@@ -863,6 +892,8 @@ fn command_catalog() -> Vec<CommandDescriptor> {
         },
         CommandDescriptor {
             flags: vec![
+                "--channel",
+                "--check",
                 "--json",
                 "--output",
                 "--yes",
@@ -942,6 +973,8 @@ fn command_catalog() -> Vec<CommandDescriptor> {
         },
         CommandDescriptor {
             flags: vec![
+                "--channel",
+                "--check",
                 "--json",
                 "--output",
                 "--yes",
@@ -1167,9 +1200,12 @@ fn schema_catalog() -> Vec<SchemaDocument> {
         },
         SchemaDocument {
             data_schema: object_schema(vec![
+                ("channel", string_schema()),
                 ("command", array_schema(string_schema())),
+                ("currentVersion", string_schema()),
                 ("dryRun", boolean_schema()),
                 ("installSource", string_schema()),
+                ("latestVersion", string_schema()),
                 ("message", string_schema()),
                 ("packageName", string_schema()),
                 ("status", string_schema()),

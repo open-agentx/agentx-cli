@@ -67,12 +67,19 @@ impl Drop for TestWorkspace {
 }
 
 pub fn run_agx(workspace: &TestWorkspace, args: &[&str]) -> Output {
+    run_agx_with_env(workspace, args, &[])
+}
+
+pub fn run_agx_with_env(workspace: &TestWorkspace, args: &[&str], envs: &[(&str, &str)]) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_agx"));
     command.args(args);
     command.env("USERPROFILE", workspace.root());
     command.env("HOME", workspace.root());
     command.env("AGX_RUN_ID", "test-run-id");
     command.env("PATH", build_test_path(workspace));
+    for (key, value) in envs {
+        command.env(key, value);
+    }
     command.output().expect("failed to run agx")
 }
 

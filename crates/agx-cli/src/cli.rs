@@ -107,6 +107,12 @@ pub enum OutputModeArg {
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum SelfUpdateChannelArg {
+    Stable,
+    Beta,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum ColorModeArg {
     Auto,
     Always,
@@ -173,9 +179,10 @@ pub enum Command {
         #[arg(help = "Agent name or alias")]
         agent: String,
         #[arg(
-            long,
+            long = "install",
+            visible_alias = "install-policy",
             value_enum,
-            default_value = "if-missing",
+            default_value = "never",
             help = "Install policy before executing: never, if-missing, or always"
         )]
         install_policy: InstallPolicyArg,
@@ -216,7 +223,12 @@ pub enum Command {
     },
 
     #[command(about = "Upgrade AGX through its detected install channel")]
-    Upgrade,
+    Upgrade {
+        #[arg(long, value_enum, help = "Update channel: stable or beta")]
+        channel: Option<SelfUpdateChannelArg>,
+        #[arg(long, help = "Only check whether an update is available")]
+        check: bool,
+    },
 
     #[command(alias = "u", about = "Update one or all agents")]
     Update {
