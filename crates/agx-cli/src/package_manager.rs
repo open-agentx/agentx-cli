@@ -43,11 +43,20 @@ pub fn install_agent(
     context: &CliContext,
 ) -> Result<LifecycleResult, AgxError> {
     if inspection::find_binary_in_path(agent.binary_name).is_some() {
+        let install_state = state::get_installed_agent_state(agent.name);
+        let message = if install_state.is_some() {
+            format!("{} is already installed.", agent.display_name)
+        } else {
+            format!(
+                "{} is already installed, but this install is not tracked by AGX.",
+                agent.display_name
+            )
+        };
         return Ok(LifecycleResult {
             changed: false,
-            install_state: state::get_installed_agent_state(agent.name),
+            install_state,
             installed: true,
-            message: Some(format!("{} is already installed.", agent.display_name)),
+            message: Some(message),
         });
     }
 
@@ -89,11 +98,20 @@ pub fn ensure_agent(
     context: &CliContext,
 ) -> Result<LifecycleResult, AgxError> {
     if inspection::find_binary_in_path(agent.binary_name).is_some() {
+        let install_state = state::get_installed_agent_state(agent.name);
+        let message = if install_state.is_some() {
+            format!("{} is already installed.", agent.display_name)
+        } else {
+            format!(
+                "{} is already installed, but this install is not tracked by AGX.",
+                agent.display_name
+            )
+        };
         return Ok(LifecycleResult {
             changed: false,
-            install_state: state::get_installed_agent_state(agent.name),
+            install_state,
             installed: true,
-            message: Some(format!("{} is already installed.", agent.display_name)),
+            message: Some(message),
         });
     }
 

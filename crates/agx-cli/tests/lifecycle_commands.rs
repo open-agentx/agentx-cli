@@ -32,6 +32,20 @@ fn install_dry_run_returns_planned_managed_state() {
 fn install_reports_already_installed_when_binary_exists() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
 
     let output = run_agx(&workspace, &["--json", "install", "qoder"]);
 
@@ -45,6 +59,25 @@ fn install_reports_already_installed_when_binary_exists() {
             .as_str()
             .expect("message should exist")
             .contains("already installed")
+    );
+}
+
+#[test]
+fn install_explains_when_existing_binary_is_not_tracked() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx(&workspace, &["--json", "install", "qoder"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installed"], true);
+    assert_eq!(json["data"]["changed"], false);
+    assert!(
+        json["data"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("not tracked by AGX")
     );
 }
 
@@ -85,6 +118,20 @@ fn install_manual_only_agent_requires_manual_action() {
 fn ensure_reports_already_installed_when_binary_exists() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
 
     let output = run_agx(&workspace, &["--json", "ensure", "qoder"]);
 
@@ -98,6 +145,25 @@ fn ensure_reports_already_installed_when_binary_exists() {
             .as_str()
             .expect("message should exist")
             .contains("already installed")
+    );
+}
+
+#[test]
+fn ensure_explains_when_existing_binary_is_not_tracked() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx(&workspace, &["--json", "ensure", "qoder"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installed"], true);
+    assert_eq!(json["data"]["changed"], false);
+    assert!(
+        json["data"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("not tracked by AGX")
     );
 }
 
