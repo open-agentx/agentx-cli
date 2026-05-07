@@ -1,5 +1,6 @@
 mod support;
 
+use sha2::{Digest, Sha256};
 use std::fs;
 
 use support::{
@@ -464,4 +465,416 @@ fn upgrade_failure_surfaces_lock_retry_hint() {
             .expect("message should exist")
             .contains("already running")
     );
+}
+
+#[test]
+fn upgrade_standalone_dry_run_returns_download_plan() {
+    let workspace = TestWorkspace::new();
+    let executable = workspace.install_fake_self_binary();
+    let manifest_path = workspace.root().join("manifest.json");
+    fs::write(
+        &manifest_path,
+        standalone_manifest_json("0.2.0", &standalone_asset_name(), "placeholder", None),
+    )
+    .expect("manifest should be written");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "standalone"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "--dry-run", "upgrade"],
+        &[
+            (
+                "AGX_TEST_SELF_EXECUTABLE_PATH",
+                executable.to_string_lossy().as_ref(),
+            ),
+            (
+                "AGX_TEST_STANDALONE_MANIFEST_PATH",
+                manifest_path.to_string_lossy().as_ref(),
+            ),
+        ],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installSource"], "standalone");
+    assert_eq!(json["data"]["status"], "planned");
+    assert_eq!(
+        json["data"]["command"][0],
+        format!(
+            "https://github.com/Drswith/agents-cli/releases/latest/download/{}",
+            standalone_asset_name()
+        )
+    );
+    assert!(
+        json["data"]["recoveryHint"]
+            .as_str()
+            .expect("recoveryHint should exist")
+            .contains(&standalone_asset_name())
+    );
+}
+
+#[test]
+fn upgrade_check_uses_standalone_manifest_version() {
+    let workspace = TestWorkspace::new();
+    let executable = workspace.install_fake_self_binary();
+    let manifest_path = workspace.root().join("manifest.json");
+    fs::write(
+        &manifest_path,
+        standalone_manifest_json("0.2.0", &standalone_asset_name(), "placeholder", None),
+    )
+    .expect("manifest should be written");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "standalone"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "upgrade", "--check"],
+        &[
+            (
+                "AGX_TEST_SELF_EXECUTABLE_PATH",
+                executable.to_string_lossy().as_ref(),
+            ),
+            (
+                "AGX_TEST_STANDALONE_MANIFEST_PATH",
+                manifest_path.to_string_lossy().as_ref(),
+            ),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["status"], "update-available");
+    assert_eq!(json["data"]["installSource"], "standalone");
+    assert_eq!(json["data"]["latestVersion"], "0.2.0");
+}
+
+#[test]
+fn upgrade_standalone_succeeds_with_checksum_verified_payload() {
+    let workspace = TestWorkspace::new();
+    let executable = workspace.install_fake_self_binary();
+    let payload_path = workspace.root().join("agx-download.bin");
+    let payload = fs::read(env!("CARGO_BIN_EXE_agx")).expect("test binary should exist");
+    let checksum = format!("{:x}", Sha256::digest(&payload));
+    fs::write(&payload_path, &payload).expect("payload should be written");
+    let manifest_path = workspace.root().join("manifest.json");
+    fs::write(
+        &manifest_path,
+        standalone_manifest_json("0.2.0", &standalone_asset_name(), &checksum, None),
+    )
+    .expect("manifest should be written");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "standalone"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "upgrade"],
+        &[
+            (
+                "AGX_TEST_SELF_EXECUTABLE_PATH",
+                executable.to_string_lossy().as_ref(),
+            ),
+            (
+                "AGX_TEST_STANDALONE_MANIFEST_PATH",
+                manifest_path.to_string_lossy().as_ref(),
+            ),
+            (
+                "AGX_TEST_STANDALONE_DOWNLOAD_PATH",
+                payload_path.to_string_lossy().as_ref(),
+            ),
+            ("AGX_TEST_SKIP_STANDALONE_VERIFY", "1"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["status"], "upgraded");
+    assert_eq!(json["data"]["installSource"], "standalone");
+    assert_eq!(json["data"]["verifiedVersion"], env!("CARGO_PKG_VERSION"));
+    let replaced = fs::read(&executable).expect("executable should still exist");
+    assert_eq!(replaced, payload);
+}
+
+#[test]
+fn upgrade_standalone_rejects_checksum_mismatch() {
+    let workspace = TestWorkspace::new();
+    let executable = workspace.install_fake_self_binary();
+    let payload_path = workspace.root().join("agx-download.bin");
+    let payload = fs::read(env!("CARGO_BIN_EXE_agx")).expect("test binary should exist");
+    fs::write(&payload_path, &payload).expect("payload should be written");
+    let manifest_path = workspace.root().join("manifest.json");
+    fs::write(
+        &manifest_path,
+        standalone_manifest_json("0.2.0", &standalone_asset_name(), "deadbeef", None),
+    )
+    .expect("manifest should be written");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "standalone"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "upgrade"],
+        &[
+            (
+                "AGX_TEST_SELF_EXECUTABLE_PATH",
+                executable.to_string_lossy().as_ref(),
+            ),
+            (
+                "AGX_TEST_STANDALONE_MANIFEST_PATH",
+                manifest_path.to_string_lossy().as_ref(),
+            ),
+            (
+                "AGX_TEST_STANDALONE_DOWNLOAD_PATH",
+                payload_path.to_string_lossy().as_ref(),
+            ),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "UPGRADE_FAILED");
+    assert_eq!(json["data"]["status"], "failed");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("Checksum mismatch")
+    );
+    assert!(
+        json["data"]["recoveryHint"]
+            .as_str()
+            .expect("recoveryHint should exist")
+            .contains(&standalone_asset_name())
+    );
+}
+
+#[test]
+fn upgrade_standalone_reports_missing_asset_as_manual_action() {
+    let workspace = TestWorkspace::new();
+    let executable = workspace.install_fake_self_binary();
+    let manifest_path = workspace.root().join("manifest.json");
+    fs::write(
+        &manifest_path,
+        standalone_manifest_json("0.2.0", "agx-linux-arm64", "placeholder", None),
+    )
+    .expect("manifest should be written");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "standalone"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "upgrade"],
+        &[
+            (
+                "AGX_TEST_SELF_EXECUTABLE_PATH",
+                executable.to_string_lossy().as_ref(),
+            ),
+            (
+                "AGX_TEST_STANDALONE_MANIFEST_PATH",
+                manifest_path.to_string_lossy().as_ref(),
+            ),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(8));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "MANUAL_ACTION_REQUIRED");
+    assert_eq!(json["data"]["status"], "manual-required");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("No standalone AGX release asset")
+    );
+}
+
+#[test]
+fn upgrade_check_reads_cached_latest_version_by_default() {
+    let workspace = TestWorkspace::new();
+    fs::create_dir_all(
+        workspace
+            .cache_file()
+            .parent()
+            .expect("cache parent should exist"),
+    )
+    .expect("cache directory should be created");
+    fs::write(
+        workspace.cache_file(),
+        concat!(
+            "{\n",
+            "  \"entries\": {\n",
+            "    \"npm:https://registry.npmjs.org:agxctl:latest\": {\n",
+            "      \"body\": \"{\\\"version\\\":\\\"0.2.0\\\"}\",\n",
+            "      \"expiresAt\": 4102444800000,\n",
+            "      \"fetchedAt\": 4102441200000\n",
+            "    }\n",
+            "  }\n",
+            "}\n"
+        ),
+    )
+    .expect("cache file should be written");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "npm"
+  }
+}
+"#,
+    );
+
+    let output = run_agx(&workspace, &["--json", "upgrade", "--check"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["latestVersion"], "0.2.0");
+    assert_eq!(json["data"]["status"], "update-available");
+}
+
+#[test]
+fn upgrade_check_no_cache_ignores_stale_cached_latest_version() {
+    let workspace = TestWorkspace::new();
+    fs::create_dir_all(
+        workspace
+            .cache_file()
+            .parent()
+            .expect("cache parent should exist"),
+    )
+    .expect("cache directory should be created");
+    fs::write(
+        workspace.cache_file(),
+        concat!(
+            "{\n",
+            "  \"entries\": {\n",
+            "    \"npm:https://registry.npmjs.org:agxctl:latest\": {\n",
+            "      \"body\": \"{\\\"version\\\":\\\"0.2.0\\\"}\",\n",
+            "      \"expiresAt\": 4102444800000,\n",
+            "      \"fetchedAt\": 4102441200000\n",
+            "    }\n",
+            "  }\n",
+            "}\n"
+        ),
+    )
+    .expect("cache file should be written");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "npm"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "--no-cache", "upgrade", "--check"],
+        &[("AGX_TEST_LATEST_VERSION", "0.1.0")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["latestVersion"], "0.1.0");
+    assert_eq!(json["data"]["status"], "up-to-date");
+}
+
+fn standalone_asset_name() -> String {
+    match std::env::consts::OS {
+        "windows" => match std::env::consts::ARCH {
+            "x86_64" => "agx-win32-x64.exe".to_string(),
+            "aarch64" => "agx-win32-arm64.exe".to_string(),
+            other => format!("agx-win32-{other}.exe"),
+        },
+        "macos" => match std::env::consts::ARCH {
+            "x86_64" => "agx-darwin-x64".to_string(),
+            "aarch64" => "agx-darwin-arm64".to_string(),
+            other => format!("agx-darwin-{other}"),
+        },
+        "linux" => match std::env::consts::ARCH {
+            "x86_64" => "agx-linux-x64".to_string(),
+            "aarch64" => "agx-linux-arm64".to_string(),
+            other => format!("agx-linux-{other}"),
+        },
+        other => panic!("unsupported test platform: {other}"),
+    }
+}
+
+fn standalone_manifest_json(
+    version: &str,
+    asset_name: &str,
+    checksum: &str,
+    download_url: Option<&str>,
+) -> String {
+    let platform = match std::env::consts::OS {
+        "windows" => "win32",
+        "macos" => "darwin",
+        "linux" => "linux",
+        other => panic!("unsupported test platform: {other}"),
+    };
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        other => panic!("unsupported test arch: {other}"),
+    };
+    let download_url = download_url.map_or_else(
+        || format!("https://github.com/Drswith/agents-cli/releases/latest/download/{asset_name}"),
+        ToString::to_string,
+    );
+    format!(
+        concat!(
+            "{{\n",
+            "  \"version\": \"{version}\",\n",
+            "  \"assets\": [\n",
+            "    {{\n",
+            "      \"name\": \"{asset_name}\",\n",
+            "      \"os\": \"{platform}\",\n",
+            "      \"arch\": \"{arch}\",\n",
+            "      \"sha256\": \"{checksum}\",\n",
+            "      \"downloadUrl\": \"{download_url}\"\n",
+            "    }}\n",
+            "  ]\n",
+            "}}\n"
+        ),
+        version = version,
+        asset_name = asset_name,
+        platform = platform,
+        arch = arch,
+        checksum = checksum,
+        download_url = download_url,
+    )
 }

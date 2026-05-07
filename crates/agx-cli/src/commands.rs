@@ -493,7 +493,7 @@ fn list_command(context: &CliContext) -> CommandResult {
             agents: agents::all_agents()
                 .iter()
                 .map(|agent| {
-                    let inspection = resolved_agent_inspection(*agent);
+                    let inspection = resolved_agent_inspection(*agent, context);
                     ListedAgent {
                         binary_name: agent.binary_name,
                         display_name: agent.display_name,
@@ -582,7 +582,7 @@ fn upgrade_command(
     check: bool,
     context: &CliContext,
 ) -> CommandResult {
-    let inspection = self_upgrade::inspect_self(channel);
+    let inspection = self_upgrade::inspect_self_with_context(channel, context);
     match self_upgrade::upgrade_self(context, channel, check) {
         Ok(result) => {
             let stale_latest = result
@@ -670,7 +670,7 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
         );
         let mut results = Vec::new();
         for agent in agents::all_agents() {
-            let inspection = resolved_agent_inspection(*agent);
+            let inspection = resolved_agent_inspection(*agent, context);
             let installed_state = crate::state::get_installed_agent_state(agent.name);
 
             if !inspection.installed && installed_state.is_none() {
@@ -838,7 +838,7 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
         context,
     );
 
-    let inspection = resolved_agent_inspection(agent);
+    let inspection = resolved_agent_inspection(agent, context);
     let installed_state = crate::state::get_installed_agent_state(agent.name);
     if !inspection.installed && installed_state.is_none() {
         return CommandResult::error(
@@ -979,7 +979,7 @@ fn info_command(agent_name: &str, context: &CliContext) -> CommandResult {
         "info",
         InfoData {
             agent: agent_info(agent),
-            inspection: resolved_agent_inspection(agent),
+            inspection: resolved_agent_inspection(agent, context),
         },
         CommandTarget::agent(agent.name),
         context,
@@ -996,7 +996,7 @@ fn inspect_command(agent_name: &str, context: &CliContext) -> CommandResult {
         InspectData {
             agent: agent_info(agent),
             capabilities: agent_capabilities(agent),
-            inspection: resolved_agent_inspection(agent),
+            inspection: resolved_agent_inspection(agent, context),
         },
         CommandTarget::agent(agent.name),
         context,
@@ -1008,7 +1008,7 @@ fn resolve_command(agent_name: &str, context: &CliContext) -> CommandResult {
         return agent_not_found_result("resolve", agent_name, context);
     };
 
-    let inspection = resolved_agent_inspection(agent);
+    let inspection = resolved_agent_inspection(agent, context);
     let install_methods = install_methods(agent);
     let installed = inspection.installed;
     let suggested_launch_command = inspection.binary_path.as_ref().map_or_else(
@@ -1613,7 +1613,22 @@ fn agent_info(agent: AgentDefinition) -> AgentInfo {
 }
 
 fn agent_capabilities(agent: AgentDefinition) -> AgentCapabilities {
-    let inspection = resolved_agent_inspection(agent);
+    let inspection = resolved_agent_inspection(
+        agent,
+        &CliContext {
+            assume_yes: false,
+            cache_mode: crate::context::CacheMode::Default,
+            color_mode: crate::context::ColorMode::Never,
+            dry_run: false,
+            idempotency_key: None,
+            interactive: false,
+            log_level: crate::context::LogLevel::Silent,
+            output_mode: crate::context::OutputMode::Json,
+            quiet: true,
+            run_id: "agent-capabilities".to_string(),
+            timeout_ms: None,
+        },
+    );
     let self_update_commands = agents::self_update_commands(agent);
     let can_self_update = !self_update_commands.is_empty();
 
@@ -1627,8 +1642,11 @@ fn agent_capabilities(agent: AgentDefinition) -> AgentCapabilities {
     }
 }
 
-fn resolved_agent_inspection(agent: AgentDefinition) -> inspection::AgentInspection {
-    let mut inspection = inspection::inspect_agent(agent);
+fn resolved_agent_inspection(
+    agent: AgentDefinition,
+    context: &CliContext,
+) -> inspection::AgentInspection {
+    let mut inspection = inspection::inspect_agent(agent, context);
     let installed_state = crate::state::get_installed_agent_state(agent.name);
 
     inspection.lifecycle = lifecycle_for(installed_state.as_ref()).to_string();

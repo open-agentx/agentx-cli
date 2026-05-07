@@ -36,6 +36,10 @@ impl TestWorkspace {
         self.config_dir().join("state.json")
     }
 
+    pub fn cache_file(&self) -> PathBuf {
+        self.config_dir().join("cache").join("versions.json")
+    }
+
     pub fn bin_dir(&self) -> PathBuf {
         self.root.join("bin")
     }
@@ -73,6 +77,10 @@ impl TestWorkspace {
 
     pub fn install_fake_npm_agent_binary(&self, binary_name: &str) -> PathBuf {
         Self::install_fake_agent_binary_in_dir(&self.npm_bin_dir(), binary_name)
+    }
+
+    pub fn install_fake_self_binary(&self) -> PathBuf {
+        Self::install_fake_agent_binary_in_dir(&self.root.join("standalone"), "agx")
     }
 
     fn install_fake_agent_binary_in_dir(directory: &Path, binary_name: &str) -> PathBuf {

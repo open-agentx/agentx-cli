@@ -23,8 +23,8 @@
 - [x] 2.8 Implement `exec` and shortcut execution through `agx <agent>`.
 - [x] 2.9 Implement `doctor` diagnostics and install-source detection.
 - [x] 2.10 Implement npm and Bun managed self-upgrade paths.
-- [ ] 2.11 Complete standalone binary self-upgrade with checksum verification and Windows delayed replacement.
-- [ ] 2.12 Complete all install-method metadata, platform ordering, self-update metadata, and latest-version cache freshness.
+- [x] 2.11 Complete standalone binary self-upgrade with checksum verification and Windows delayed replacement.
+- [x] 2.12 Complete all install-method metadata, platform ordering, self-update metadata, and latest-version cache freshness.
 
 ## 3. Packaging and Release
 

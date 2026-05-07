@@ -129,14 +129,14 @@ pub struct IssueSubject {
     pub name: Option<String>,
 }
 
-pub fn run_doctor(_context: &CliContext) -> DoctorData {
+pub fn run_doctor(context: &CliContext) -> DoctorData {
     let executable = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("agx"));
     let state_file = state::state_file_path();
     let config_file = state_file.parent().map_or_else(
         || PathBuf::from("config.json"),
         |parent| parent.join("config.json"),
     );
-    let self_inspection = self_upgrade::inspect_self(None);
+    let self_inspection = self_upgrade::inspect_self_with_context(None, context);
     let install_source = inspect_install_source(&executable);
     let installers = Installers {
         brew: inspection::find_binary_in_path("brew").is_some(),
@@ -344,7 +344,7 @@ fn inspected_agents() -> Vec<DoctorAgent> {
     agents::all_agents()
         .iter()
         .filter_map(|agent| {
-            let inspection = inspection::inspect_agent(*agent);
+            let inspection = inspection::inspect_agent(*agent, &default_doctor_context());
             if !inspection.installed {
                 return None;
             }
@@ -550,5 +550,21 @@ fn install_source_label(install_source: self_upgrade::InstallSourceKind) -> &'st
         self_upgrade::InstallSourceKind::SourceBuild => "source",
         self_upgrade::InstallSourceKind::Standalone => "binary",
         self_upgrade::InstallSourceKind::Unknown => "unknown",
+    }
+}
+
+fn default_doctor_context() -> CliContext {
+    CliContext {
+        assume_yes: false,
+        cache_mode: crate::context::CacheMode::Default,
+        color_mode: crate::context::ColorMode::Never,
+        dry_run: false,
+        idempotency_key: None,
+        interactive: false,
+        log_level: crate::context::LogLevel::Silent,
+        output_mode: crate::context::OutputMode::Json,
+        quiet: true,
+        run_id: "doctor-inspection".to_string(),
+        timeout_ms: None,
     }
 }

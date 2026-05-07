@@ -2,6 +2,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::agents::AgentDefinition;
+use crate::config;
+use crate::context::CliContext;
+use crate::state;
+use crate::version_registry;
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,13 +22,13 @@ pub struct AgentInspection {
     pub update_label: String,
 }
 
-pub fn inspect_agent(agent: AgentDefinition) -> AgentInspection {
+pub fn inspect_agent(agent: AgentDefinition, context: &CliContext) -> AgentInspection {
     let binary_path = find_binary_in_path(agent.binary_name);
     let installed = binary_path.is_some();
     let installed_version = binary_path
         .as_ref()
         .and_then(|path| probe_binary_version(path));
-    let latest_version = agent.npm_package.and_then(get_latest_version);
+    let latest_version = get_latest_version_for_agent(agent, context);
 
     AgentInspection {
         binary_path: binary_path.map(|path| path.to_string_lossy().into_owned()),
@@ -96,9 +100,18 @@ fn parse_version(stdout: &str) -> Option<String> {
         })
 }
 
-fn get_latest_version(package_name: &str) -> Option<String> {
+fn get_latest_version(package_name: &str, context: &CliContext) -> Option<String> {
     let env_key = format!("AGX_TEST_LATEST_PACKAGE_{}", sanitize_env_key(package_name));
-    std::env::var(env_key).ok()
+    if let Ok(version) = std::env::var(env_key) {
+        return Some(version);
+    }
+
+    version_registry::get_latest_version(
+        package_name,
+        "latest",
+        config::get_config_value("selfUpdateRegistry").as_str(),
+        context,
+    )
 }
 
 fn sanitize_env_key(value: &str) -> String {
@@ -112,4 +125,13 @@ fn sanitize_env_key(value: &str) -> String {
             }
         })
         .collect()
+}
+
+fn get_latest_version_for_agent(agent: AgentDefinition, context: &CliContext) -> Option<String> {
+    let installed_state = state::get_installed_agent_state(agent.name);
+    let package_name = installed_state
+        .as_ref()
+        .and_then(|state| state.package_name.as_deref())
+        .or(agent.npm_package)?;
+    get_latest_version(package_name, context)
 }

@@ -12,6 +12,7 @@ mod output;
 mod package_manager;
 mod self_upgrade;
 mod state;
+mod version_registry;
 
 use std::process::ExitCode;
 
