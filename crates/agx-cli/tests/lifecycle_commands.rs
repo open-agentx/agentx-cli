@@ -1,6 +1,6 @@
 mod support;
 
-use support::{TestWorkspace, run_agx, stdout_json};
+use support::{TestWorkspace, run_agx, stdout_json, stdout_json_lines};
 
 #[test]
 fn install_unknown_agent_returns_agent_not_found() {
@@ -46,6 +46,23 @@ fn install_reports_already_installed_when_binary_exists() {
             .expect("message should exist")
             .contains("already installed")
     );
+}
+
+#[test]
+fn install_ndjson_emits_single_result_event() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(
+        &workspace,
+        &["--output", "ndjson", "--dry-run", "install", "qoder"],
+    );
+
+    assert!(output.status.success());
+    let lines = stdout_json_lines(&output);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["type"], "result");
+    assert_eq!(lines[0]["action"], "install");
+    assert_eq!(lines[0]["meta"]["mode"], "ndjson");
+    assert_eq!(lines[0]["data"]["data"]["agent"]["name"], "qoder");
 }
 
 #[test]
@@ -268,4 +285,36 @@ fn update_all_reports_manual_required_for_unknown_tracked_agent() {
     assert_eq!(json["data"]["scope"], "all");
     assert_eq!(json["data"]["results"][0]["name"], "legacy-agent");
     assert_eq!(json["data"]["results"][0]["status"], "manual-required");
+}
+
+#[test]
+fn update_ndjson_emits_single_result_event() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx(
+        &workspace,
+        &["--output", "ndjson", "--dry-run", "update", "qoder"],
+    );
+
+    assert!(output.status.success());
+    let lines = stdout_json_lines(&output);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["type"], "result");
+    assert_eq!(lines[0]["action"], "update");
+    assert_eq!(lines[0]["meta"]["mode"], "ndjson");
+    assert_eq!(lines[0]["data"]["data"]["results"][0]["status"], "planned");
 }

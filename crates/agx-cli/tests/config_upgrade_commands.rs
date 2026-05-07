@@ -2,7 +2,7 @@ mod support;
 
 use std::fs;
 
-use support::{TestWorkspace, run_agx, stdout_json};
+use support::{TestWorkspace, run_agx, stdout_json, stdout_json_lines};
 
 #[test]
 fn config_reset_restores_defaults() {
@@ -149,4 +149,28 @@ fn upgrade_rejects_unknown_recorded_install_source() {
             .expect("message should exist")
             .contains("could not determine its install source")
     );
+}
+
+#[test]
+fn upgrade_ndjson_emits_single_result_event() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "bun"
+  }
+}
+"#,
+    );
+
+    let output = run_agx(&workspace, &["--output", "ndjson", "--dry-run", "upgrade"]);
+
+    assert!(output.status.success());
+    let lines = stdout_json_lines(&output);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["type"], "result");
+    assert_eq!(lines[0]["action"], "upgrade");
+    assert_eq!(lines[0]["meta"]["mode"], "ndjson");
+    assert_eq!(lines[0]["data"]["data"]["installSource"], "bun");
 }
