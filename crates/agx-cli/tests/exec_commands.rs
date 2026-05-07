@@ -49,6 +49,64 @@ fn shortcut_exec_uses_same_execution_path() {
 }
 
 #[test]
+fn exec_dry_run_reports_install_and_command_when_missing() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(
+        &workspace,
+        &[
+            "--json",
+            "--dry-run",
+            "exec",
+            "qoder",
+            "--install-policy",
+            "if-missing",
+            "--",
+            "--version",
+        ],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["dryRun"], true);
+    assert_eq!(json["data"]["installPolicy"], "if-missing");
+    assert_eq!(json["data"]["installedBefore"], false);
+    assert_eq!(json["data"]["installedAfter"], false);
+    assert_eq!(json["data"]["command"][0], "qodercli");
+    assert!(
+        json["data"]["message"]
+            .as_str()
+            .expect("message should be a string")
+            .contains("would ensure Qoder CLI is installed")
+    );
+}
+
+#[test]
+fn exec_always_policy_runs_when_binary_is_already_present() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx(
+        &workspace,
+        &[
+            "--json",
+            "exec",
+            "qoder",
+            "--install-policy",
+            "always",
+            "--",
+            "--version",
+        ],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installPolicy"], "always");
+    assert_eq!(json["data"]["installedBefore"], true);
+    assert_eq!(json["data"]["installedAfter"], true);
+    assert_eq!(json["data"]["exitCode"], 0);
+}
+
+#[test]
 fn exec_without_install_policy_returns_manual_action_required_when_missing() {
     let workspace = TestWorkspace::new();
     let output = run_agx(

@@ -37,6 +37,54 @@ fn config_reads_bom_prefixed_compatible_json() {
 }
 
 #[test]
+fn config_get_returns_null_for_missing_key() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "config", "get", "nonexistent"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert!(json["data"]["value"].is_null());
+}
+
+#[test]
+fn config_set_normalizes_registry_url() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(
+        &workspace,
+        &[
+            "--json",
+            "config",
+            "set",
+            "selfUpdateRegistry",
+            "https://registry.npmjs.org/",
+        ],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["value"], "https://registry.npmjs.org");
+
+    let stored = fs::read_to_string(workspace.config_file()).expect("config file should exist");
+    assert!(stored.contains("\"selfUpdateRegistry\": \"https://registry.npmjs.org\""));
+}
+
+#[test]
+fn config_set_persists_numeric_timeout_values() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(
+        &workspace,
+        &["--json", "config", "set", "networkTimeoutMs", "15000"],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["value"], 15000);
+
+    let stored = fs::read_to_string(workspace.config_file()).expect("config file should exist");
+    assert!(stored.contains("\"networkTimeoutMs\": 15000"));
+}
+
+#[test]
 fn update_all_dry_run_reads_bom_prefixed_state_file() {
     let workspace = TestWorkspace::new();
     workspace.write_state_bytes(

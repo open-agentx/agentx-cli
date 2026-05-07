@@ -2,7 +2,7 @@ mod support;
 
 use std::fs;
 
-use support::{TestWorkspace, run_agx, stdout_json};
+use support::{TestWorkspace, run_agx, stdout_json, stdout_text};
 
 #[test]
 fn capabilities_json_reports_controlled_installer_availability() {
@@ -21,6 +21,17 @@ fn capabilities_json_reports_controlled_installer_availability() {
         "if-missing"
     );
     assert_eq!(json["data"]["outputModes"][2], "ndjson");
+}
+
+#[test]
+fn capabilities_human_output_stays_readable() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["capabilities"]);
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("AGX Capabilities"));
+    assert!(stdout.contains("agx capabilities --json"));
 }
 
 #[test]
@@ -51,6 +62,17 @@ fn doctor_json_reports_recorded_install_source_and_missing_installers() {
 }
 
 #[test]
+fn doctor_json_uses_source_build_heuristic_without_recorded_state() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "doctor"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installSource"]["kind"], "source-build");
+    assert_eq!(json["data"]["installSource"]["confidence"], "heuristic");
+}
+
+#[test]
 fn doctor_json_warns_for_invalid_config_and_stale_lock() {
     let workspace = TestWorkspace::new();
     workspace.write_config_bytes(b"{not-valid-json}\n");
@@ -75,4 +97,18 @@ fn doctor_json_warns_for_invalid_config_and_stale_lock() {
             .iter()
             .any(|check| { check["name"] == "state-lock" && check["status"] == "warn" })
     );
+}
+
+#[test]
+fn doctor_human_output_includes_summary_and_check_names() {
+    let workspace = TestWorkspace::new();
+    workspace.write_config_bytes(b"{not-valid-json}\n");
+
+    let output = run_agx(&workspace, &["doctor"]);
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("AGX runtime checks completed with warnings."));
+    assert!(stdout.contains("\"name\":\"bun\""));
+    assert!(stdout.contains("\"name\":\"config\""));
 }

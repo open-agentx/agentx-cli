@@ -25,6 +25,45 @@ fn commands_json_includes_core_lifecycle_commands() {
 }
 
 #[test]
+fn commands_json_describes_install_and_inspect_flags() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "commands"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let commands = json["data"]["commands"]
+        .as_array()
+        .expect("commands should be an array");
+
+    let install = commands
+        .iter()
+        .find(|command| command["name"] == "install")
+        .expect("install command should exist");
+    let inspect = commands
+        .iter()
+        .find(|command| command["name"] == "inspect")
+        .expect("inspect command should exist");
+
+    let install_flags: Vec<_> = install["flags"]
+        .as_array()
+        .expect("install flags should be an array")
+        .iter()
+        .filter_map(|flag| flag.as_str())
+        .collect();
+    let inspect_flags: Vec<_> = inspect["flags"]
+        .as_array()
+        .expect("inspect flags should be an array")
+        .iter()
+        .filter_map(|flag| flag.as_str())
+        .collect();
+
+    assert!(install_flags.contains(&"--yes"));
+    assert!(install_flags.contains(&"--dry-run"));
+    assert!(inspect_flags.contains(&"--refresh"));
+    assert!(inspect_flags.contains(&"--no-cache"));
+}
+
+#[test]
 fn schema_json_includes_lifecycle_and_workflow_surfaces() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "schema"]);
