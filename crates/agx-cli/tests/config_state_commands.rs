@@ -81,6 +81,44 @@ fn config_set_normalizes_registry_url() {
 }
 
 #[test]
+fn config_set_persists_beta_self_update_channel() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(
+        &workspace,
+        &["--json", "config", "set", "selfUpdateChannel", "beta"],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["value"], "beta");
+
+    let stored = fs::read_to_string(workspace.config_file()).expect("config file should exist");
+    assert!(stored.contains("\"selfUpdateChannel\": \"beta\""));
+}
+
+#[test]
+fn config_set_persists_npm_bun_update_strategy() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(
+        &workspace,
+        &[
+            "--json",
+            "config",
+            "set",
+            "npmBunUpdateStrategy",
+            "respect-semver",
+        ],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["value"], "respect-semver");
+
+    let stored = fs::read_to_string(workspace.config_file()).expect("config file should exist");
+    assert!(stored.contains("\"npmBunUpdateStrategy\": \"respect-semver\""));
+}
+
+#[test]
 fn config_set_persists_numeric_timeout_values() {
     let workspace = TestWorkspace::new();
     let output = run_agx(
@@ -94,6 +132,44 @@ fn config_set_persists_numeric_timeout_values() {
 
     let stored = fs::read_to_string(workspace.config_file()).expect("config file should exist");
     assert!(stored.contains("\"networkTimeoutMs\": 15000"));
+}
+
+#[test]
+fn config_set_rejects_unknown_keys() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(
+        &workspace,
+        &["--json", "config", "set", "nonexistentKey", "value"],
+    );
+
+    assert_eq!(output.status.code(), Some(2));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "INVALID_ARGUMENT");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("Unknown config key")
+    );
+}
+
+#[test]
+fn config_set_rejects_invalid_registry_urls() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(
+        &workspace,
+        &["--json", "config", "set", "selfUpdateRegistry", "npmjs"],
+    );
+
+    assert_eq!(output.status.code(), Some(2));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "INVALID_ARGUMENT");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("valid absolute URL")
+    );
 }
 
 #[test]

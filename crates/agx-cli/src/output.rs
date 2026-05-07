@@ -461,6 +461,7 @@ fn render_list(result: &CommandResult) {
             } else {
                 "not installed"
             };
+            let installed = agent["installed"].as_bool().unwrap_or(false);
             let version = agent["installedVersion"].as_str().unwrap_or("");
             let update = agent["updateLabel"].as_str().unwrap_or("");
             let source = agent["sourceLabel"].as_str().unwrap_or("");
@@ -468,7 +469,9 @@ fn render_list(result: &CommandResult) {
                 "  {}: {}{}{}{}",
                 agent["displayName"].as_str().unwrap_or("unknown"),
                 status,
-                if version.is_empty() {
+                if version.is_empty() && installed {
+                    " (unknown version)".to_string()
+                } else if version.is_empty() {
                     String::new()
                 } else {
                     format!(" ({version})")
