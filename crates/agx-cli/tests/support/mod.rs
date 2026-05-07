@@ -40,6 +40,14 @@ impl TestWorkspace {
         self.root.join("bin")
     }
 
+    pub fn bun_bin_dir(&self) -> PathBuf {
+        self.root.join(".bun").join("bin")
+    }
+
+    pub fn npm_bin_dir(&self) -> PathBuf {
+        self.root.join("node_modules").join(".bin")
+    }
+
     pub fn write_config_bytes(&self, contents: &[u8]) {
         fs::create_dir_all(self.config_dir()).expect("failed to create config dir");
         fs::write(self.config_file(), contents).expect("failed to write config file");
@@ -55,6 +63,23 @@ impl TestWorkspace {
         let extension = if cfg!(windows) { ".exe" } else { "" };
         let destination = self.bin_dir().join(format!("{binary_name}{extension}"));
         fs::create_dir_all(self.bin_dir()).expect("failed to create bin dir");
+        fs::copy(source, &destination).expect("failed to copy test binary");
+        destination
+    }
+
+    pub fn install_fake_bun_agent_binary(&self, binary_name: &str) -> PathBuf {
+        Self::install_fake_agent_binary_in_dir(&self.bun_bin_dir(), binary_name)
+    }
+
+    pub fn install_fake_npm_agent_binary(&self, binary_name: &str) -> PathBuf {
+        Self::install_fake_agent_binary_in_dir(&self.npm_bin_dir(), binary_name)
+    }
+
+    fn install_fake_agent_binary_in_dir(directory: &Path, binary_name: &str) -> PathBuf {
+        let source = PathBuf::from(env!("CARGO_BIN_EXE_agx"));
+        let extension = if cfg!(windows) { ".exe" } else { "" };
+        let destination = directory.join(format!("{binary_name}{extension}"));
+        fs::create_dir_all(directory).expect("failed to create bin dir");
         fs::copy(source, &destination).expect("failed to copy test binary");
         destination
     }
@@ -100,5 +125,10 @@ pub fn stdout_text(output: &Output) -> String {
 }
 
 fn build_test_path(workspace: &TestWorkspace) -> OsString {
-    std::env::join_paths([workspace.bin_dir()]).expect("failed to join PATH")
+    std::env::join_paths([
+        workspace.bin_dir(),
+        workspace.bun_bin_dir(),
+        workspace.npm_bin_dir(),
+    ])
+    .expect("failed to join PATH")
 }

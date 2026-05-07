@@ -82,6 +82,30 @@ fn install_explains_when_existing_binary_is_not_tracked() {
 }
 
 #[test]
+fn install_tracks_existing_bun_install_when_source_is_unambiguous() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_bun_agent_binary("qodercli");
+
+    let output = run_agx(&workspace, &["--json", "install", "qoder"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installed"], true);
+    assert_eq!(json["data"]["changed"], true);
+    assert_eq!(json["data"]["installState"]["installType"], "bun");
+    assert_eq!(
+        json["data"]["installState"]["packageName"],
+        "@qoder-ai/qodercli"
+    );
+    assert!(
+        json["data"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("now tracking the existing install")
+    );
+}
+
+#[test]
 fn install_ndjson_emits_single_result_event() {
     let workspace = TestWorkspace::new();
     let output = run_agx(
@@ -164,6 +188,30 @@ fn ensure_explains_when_existing_binary_is_not_tracked() {
             .as_str()
             .expect("message should exist")
             .contains("not tracked by AGX")
+    );
+}
+
+#[test]
+fn ensure_tracks_existing_npm_install_when_source_is_unambiguous() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_npm_agent_binary("qodercli");
+
+    let output = run_agx(&workspace, &["--json", "ensure", "qoder"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installed"], true);
+    assert_eq!(json["data"]["changed"], true);
+    assert_eq!(json["data"]["installState"]["installType"], "npm");
+    assert_eq!(
+        json["data"]["installState"]["packageName"],
+        "@qoder-ai/qodercli"
+    );
+    assert!(
+        json["data"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("now tracking the existing install")
     );
 }
 

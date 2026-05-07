@@ -42,10 +42,26 @@ pub fn install_agent(
     agent: AgentDefinition,
     context: &CliContext,
 ) -> Result<LifecycleResult, AgxError> {
-    if inspection::find_binary_in_path(agent.binary_name).is_some() {
+    if let Some(binary_path) = inspection::find_binary_in_path(agent.binary_name) {
         let install_state = state::get_installed_agent_state(agent.name);
+        let inferred_state = install_state
+            .clone()
+            .or_else(|| infer_existing_install_state(agent, &binary_path));
+        let adopted = install_state.is_none() && inferred_state.is_some();
+        if adopted && !context.dry_run {
+            state::set_installed_agent_state(
+                inferred_state
+                    .clone()
+                    .expect("inferred state should exist when adopted"),
+            )?;
+        }
         let message = if install_state.is_some() {
             format!("{} is already installed.", agent.display_name)
+        } else if adopted {
+            format!(
+                "AGX is now tracking the existing install of {}.",
+                agent.display_name
+            )
         } else {
             format!(
                 "{} is already installed, but this install is not tracked by AGX.",
@@ -53,8 +69,8 @@ pub fn install_agent(
             )
         };
         return Ok(LifecycleResult {
-            changed: false,
-            install_state,
+            changed: adopted,
+            install_state: inferred_state,
             installed: true,
             message: Some(message),
         });
@@ -97,10 +113,26 @@ pub fn ensure_agent(
     agent: AgentDefinition,
     context: &CliContext,
 ) -> Result<LifecycleResult, AgxError> {
-    if inspection::find_binary_in_path(agent.binary_name).is_some() {
+    if let Some(binary_path) = inspection::find_binary_in_path(agent.binary_name) {
         let install_state = state::get_installed_agent_state(agent.name);
+        let inferred_state = install_state
+            .clone()
+            .or_else(|| infer_existing_install_state(agent, &binary_path));
+        let adopted = install_state.is_none() && inferred_state.is_some();
+        if adopted && !context.dry_run {
+            state::set_installed_agent_state(
+                inferred_state
+                    .clone()
+                    .expect("inferred state should exist when adopted"),
+            )?;
+        }
         let message = if install_state.is_some() {
             format!("{} is already installed.", agent.display_name)
+        } else if adopted {
+            format!(
+                "AGX is now tracking the existing install of {}.",
+                agent.display_name
+            )
         } else {
             format!(
                 "{} is already installed, but this install is not tracked by AGX.",
@@ -108,8 +140,8 @@ pub fn ensure_agent(
             )
         };
         return Ok(LifecycleResult {
-            changed: false,
-            install_state,
+            changed: adopted,
+            install_state: inferred_state,
             installed: true,
             message: Some(message),
         });
@@ -407,6 +439,25 @@ fn installed_state(
         package_target_kind: Some("package".to_string()),
         command: None,
     }
+}
+
+fn infer_existing_install_state(
+    agent: AgentDefinition,
+    binary_path: &std::path::Path,
+) -> Option<InstalledAgentState> {
+    let package_name = agent.npm_package?;
+    let normalized = binary_path.to_string_lossy().replace('\\', "/");
+    let install_type = if normalized.contains("/.bun/bin/")
+        || normalized.contains("/.bun/install/global/")
+    {
+        "bun"
+    } else if normalized.contains("/node_modules/.bin/") || normalized.contains("/node_modules/") {
+        "npm"
+    } else {
+        return None;
+    };
+
+    Some(installed_state(agent, install_type, package_name))
 }
 
 fn run_external_command(command: &[String], error_code: AgxErrorCode) -> Result<(), AgxError> {
