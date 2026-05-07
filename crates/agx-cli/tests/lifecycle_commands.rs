@@ -106,6 +106,27 @@ fn install_tracks_existing_bun_install_when_source_is_unambiguous() {
 }
 
 #[test]
+fn install_tracks_existing_script_install_when_agent_supports_self_update() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("agent");
+
+    let output = run_agx(&workspace, &["--json", "install", "cursor"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installed"], true);
+    assert_eq!(json["data"]["changed"], true);
+    assert_eq!(json["data"]["installState"]["installType"], "script");
+    assert_eq!(json["data"]["installState"]["command"], "agent update");
+    assert!(
+        json["data"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("now tracking the existing install")
+    );
+}
+
+#[test]
 fn install_ndjson_emits_single_result_event() {
     let workspace = TestWorkspace::new();
     let output = run_agx(
@@ -207,6 +228,27 @@ fn ensure_tracks_existing_npm_install_when_source_is_unambiguous() {
         json["data"]["installState"]["packageName"],
         "@qoder-ai/qodercli"
     );
+    assert!(
+        json["data"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("now tracking the existing install")
+    );
+}
+
+#[test]
+fn ensure_tracks_existing_script_install_when_agent_supports_self_update() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("agent");
+
+    let output = run_agx(&workspace, &["--json", "ensure", "cursor"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installed"], true);
+    assert_eq!(json["data"]["changed"], true);
+    assert_eq!(json["data"]["installState"]["installType"], "script");
+    assert_eq!(json["data"]["installState"]["command"], "agent update");
     assert!(
         json["data"]["message"]
             .as_str()

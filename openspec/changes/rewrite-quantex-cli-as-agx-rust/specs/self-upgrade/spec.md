@@ -34,6 +34,19 @@ AGX SHALL use the matching managed installation channel when self-upgrading npm-
 - THEN AGX upgrades through a Bun package installation path
 - AND verifies that the resulting `agx` reports the expected version
 
+### Requirement: Managed self-upgrade MUST surface registry freshness warnings
+
+AGX SHALL warn when the selected managed registry lags behind upstream npm metadata.
+
+#### Scenario: Mirror registry is behind upstream npm
+
+- GIVEN AGX is using npm or Bun as its self-upgrade channel
+- AND AGX resolves a latest version from the selected registry
+- AND AGX also observes a newer upstream npm version
+- WHEN the user runs `agx upgrade` or `agx upgrade --check`
+- THEN AGX returns a `MIRROR_LAG` warning in structured output
+- AND human output explains that the selected registry currently installs an older version than upstream npm
+
 ### Requirement: Binary self-upgrade MUST verify checksum
 
 AGX standalone binary self-upgrade SHALL verify the downloaded binary checksum before replacement.

@@ -445,19 +445,36 @@ fn infer_existing_install_state(
     agent: AgentDefinition,
     binary_path: &std::path::Path,
 ) -> Option<InstalledAgentState> {
-    let package_name = agent.npm_package?;
     let normalized = binary_path.to_string_lossy().replace('\\', "/");
-    let install_type = if normalized.contains("/.bun/bin/")
-        || normalized.contains("/.bun/install/global/")
-    {
-        "bun"
-    } else if normalized.contains("/node_modules/.bin/") || normalized.contains("/node_modules/") {
-        "npm"
-    } else {
-        return None;
-    };
+    if let Some(package_name) = agent.npm_package {
+        let install_type =
+            if normalized.contains("/.bun/bin/") || normalized.contains("/.bun/install/global/") {
+                Some("bun")
+            } else if normalized.contains("/node_modules/.bin/")
+                || normalized.contains("/node_modules/")
+            {
+                Some("npm")
+            } else {
+                None
+            };
+        if let Some(install_type) = install_type {
+            return Some(installed_state(agent, install_type, package_name));
+        }
+    }
 
-    Some(installed_state(agent, install_type, package_name))
+    if agent.npm_package.is_none() {
+        return crate::agents::self_update_commands(agent)
+            .first()
+            .map(|command| InstalledAgentState {
+                agent_name: agent.name.to_string(),
+                install_type: "script".to_string(),
+                package_name: None,
+                package_target_kind: None,
+                command: Some((*command).to_string()),
+            });
+    }
+
+    None
 }
 
 fn run_external_command(command: &[String], error_code: AgxErrorCode) -> Result<(), AgxError> {

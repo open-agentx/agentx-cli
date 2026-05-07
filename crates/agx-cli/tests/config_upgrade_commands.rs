@@ -2,7 +2,9 @@ mod support;
 
 use std::fs;
 
-use support::{TestWorkspace, run_agx, run_agx_with_env, stdout_json, stdout_json_lines};
+use support::{
+    TestWorkspace, run_agx, run_agx_with_env, stdout_json, stdout_json_lines, stdout_text,
+};
 
 #[test]
 fn config_reset_restores_defaults() {
@@ -242,6 +244,46 @@ fn upgrade_treats_lower_latest_version_as_stale_instead_of_downgrading() {
 }
 
 #[test]
+fn upgrade_warns_when_selected_registry_lags_upstream_npm() {
+    let workspace = TestWorkspace::new();
+    workspace.write_config_bytes(
+        br#"{
+  "selfUpdateRegistry": "https://registry.npmmirror.com"
+}
+"#,
+    );
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "npm"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "upgrade"],
+        &[
+            ("AGX_TEST_LATEST_VERSION", "0.1.0"),
+            ("AGX_TEST_UPSTREAM_LATEST_VERSION", "0.2.0"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["status"], "up-to-date");
+    assert_eq!(json["warnings"][0]["code"], "MIRROR_LAG");
+    assert!(
+        json["warnings"][0]["message"]
+            .as_str()
+            .expect("warning should exist")
+            .contains("currently installs 0.1.0")
+    );
+}
+
+#[test]
 fn upgrade_check_uses_beta_channel_for_dist_tag_and_command() {
     let workspace = TestWorkspace::new();
     workspace.write_state_bytes(
@@ -273,6 +315,40 @@ fn upgrade_check_uses_beta_channel_for_dist_tag_and_command() {
     let dry_run_json = stdout_json(&dry_run_output);
     assert_eq!(dry_run_json["data"]["channel"], "beta");
     assert_eq!(dry_run_json["data"]["command"][3], "agxctl@beta");
+}
+
+#[test]
+fn upgrade_human_output_prints_registry_lag_warning() {
+    let workspace = TestWorkspace::new();
+    workspace.write_config_bytes(
+        br#"{
+  "selfUpdateRegistry": "https://registry.npmmirror.com"
+}
+"#,
+    );
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "bun"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["upgrade"],
+        &[
+            ("AGX_TEST_LATEST_VERSION", "0.1.0"),
+            ("AGX_TEST_UPSTREAM_LATEST_VERSION", "0.2.0"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("AGX is already up to date."));
+    assert!(stdout.contains("currently installs 0.1.0"));
 }
 
 #[test]

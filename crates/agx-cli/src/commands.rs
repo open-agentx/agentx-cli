@@ -590,6 +590,15 @@ fn upgrade_command(
                 .as_deref()
                 .zip(result.current_version.as_deref())
                 .is_some_and(|(latest, current)| self_upgrade::is_version_older(latest, current));
+            let mirror_lag = inspection
+                .latest_version
+                .as_deref()
+                .zip(inspection.upstream_latest_version.as_deref())
+                .is_some_and(|(latest, upstream)| latest != upstream)
+                && matches!(
+                    inspection.install_source,
+                    self_upgrade::InstallSourceKind::Bun | self_upgrade::InstallSourceKind::Npm
+                );
             let target = CommandTarget {
                 kind: crate::output::TargetKind::SelfTarget,
                 name: Some("agx".to_string()),
@@ -603,6 +612,16 @@ fn upgrade_command(
                 command_result.warnings.push(CommandWarning {
                     code: "STALE_LATEST_VERSION".to_string(),
                     message: "Selected registry reported a version older than the current AGX build; downgrade was skipped.".to_string(),
+                });
+            }
+            if mirror_lag {
+                command_result.warnings.push(CommandWarning {
+                    code: "MIRROR_LAG".to_string(),
+                    message: format!(
+                        "The selected registry currently installs {}, while upstream npm has {}. Retry later or set selfUpdateRegistry to another registry if you need the upstream release now.",
+                        inspection.latest_version.as_deref().unwrap_or("unknown"),
+                        inspection.upstream_latest_version.as_deref().unwrap_or("unknown")
+                    ),
                 });
             }
             command_result

@@ -57,3 +57,25 @@ AGX SHALL support dry-run planning for lifecycle and execution commands that can
 - THEN AGX reports the planned command or action
 - AND does not mutate state
 - AND does not run external installers
+
+### Requirement: Lifecycle commands MUST safely adopt detectable existing installs
+
+AGX SHALL begin tracking an already-installed agent when the install source can be inferred without guessing.
+
+#### Scenario: Managed install is inferred from npm or Bun layout
+
+- GIVEN an agent binary already exists on PATH
+- AND AGX has no recorded state for that agent
+- WHEN the user runs `agx install <agent>` or `agx ensure <agent>`
+- THEN AGX detects npm or Bun layout from the resolved binary path when available
+- AND records compatible managed install state
+- AND reports that AGX is now tracking the existing install
+
+#### Scenario: Script-driven install is inferred from self-update metadata
+
+- GIVEN an agent binary already exists on PATH
+- AND the agent exposes a stable self-update command but no managed npm or Bun package
+- AND AGX has no recorded state for that agent
+- WHEN the user runs `agx install <agent>` or `agx ensure <agent>`
+- THEN AGX records compatible script install state using the known self-update command
+- AND reports that AGX is now tracking the existing install

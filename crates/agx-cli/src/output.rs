@@ -717,12 +717,14 @@ fn render_upgrade(result: &CommandResult) {
             let latest = data["latestVersion"].as_str().unwrap_or("unknown");
             let channel = data["channel"].as_str().unwrap_or("stable");
             println!("Update available: {latest} ({channel})");
+            render_upgrade_warnings(&result.warnings);
         }
         "up-to-date" => {
             println!("AGX is already up to date.");
             if let Some(message) = data["message"].as_str() {
                 println!("{message}");
             }
+            render_upgrade_warnings(&result.warnings);
         }
         "planned" => {
             println!("Planned AGX upgrade:");
@@ -734,9 +736,19 @@ fn render_upgrade(result: &CommandResult) {
                     .join(" ");
                 println!("{command}");
             }
+            render_upgrade_warnings(&result.warnings);
         }
-        "upgraded" => println!("AGX upgraded successfully."),
+        "upgraded" => {
+            println!("AGX upgraded successfully.");
+            render_upgrade_warnings(&result.warnings);
+        }
         _ => println!("{data}"),
+    }
+}
+
+fn render_upgrade_warnings(warnings: &[CommandWarning]) {
+    for warning in warnings {
+        println!("{}", warning.message);
     }
 }
 

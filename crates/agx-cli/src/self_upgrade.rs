@@ -61,7 +61,11 @@ pub struct SelfInspection {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latest_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub managed_registry: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub recommended_upgrade_command: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upstream_latest_version: Option<String>,
     pub update_channel: SelfUpdateChannel,
 }
 
@@ -76,6 +80,7 @@ pub fn inspect_self(requested_channel: Option<SelfUpdateChannel>) -> SelfInspect
         executable_path: executable.to_string_lossy().into_owned(),
         install_source,
         latest_version: resolve_latest_version(channel),
+        managed_registry: resolve_registry_override(),
         recommended_upgrade_command: if can_auto_update(install_source) {
             Some(match channel {
                 SelfUpdateChannel::Stable => "agx upgrade".to_string(),
@@ -84,6 +89,7 @@ pub fn inspect_self(requested_channel: Option<SelfUpdateChannel>) -> SelfInspect
         } else {
             None
         },
+        upstream_latest_version: resolve_upstream_latest_version(channel),
         update_channel: channel,
     }
 }
@@ -392,11 +398,7 @@ fn resolve_latest_version(channel: SelfUpdateChannel) -> Option<String> {
         return Some(version);
     }
 
-    let registry = config::get_config_value("selfUpdateRegistry")
-        .as_str()
-        .unwrap_or(OFFICIAL_NPM_REGISTRY)
-        .trim_end_matches('/')
-        .to_string();
+    let registry = resolve_registry_override().unwrap_or_else(|| OFFICIAL_NPM_REGISTRY.to_string());
     let dist_tag = if channel == SelfUpdateChannel::Beta {
         "beta"
     } else {
@@ -408,6 +410,30 @@ fn resolve_latest_version(channel: SelfUpdateChannel) -> Option<String> {
     payload["dist-tags"][dist_tag]
         .as_str()
         .map(ToString::to_string)
+}
+
+fn resolve_upstream_latest_version(channel: SelfUpdateChannel) -> Option<String> {
+    if let Ok(version) = std::env::var("AGX_TEST_UPSTREAM_LATEST_VERSION") {
+        return Some(version);
+    }
+
+    let dist_tag = if channel == SelfUpdateChannel::Beta {
+        "beta"
+    } else {
+        "latest"
+    };
+    let url = format!("{OFFICIAL_NPM_REGISTRY}/{AGX_PACKAGE_NAME}");
+    let response = Client::builder().build().ok()?.get(url).send().ok()?;
+    let payload = response.json::<serde_json::Value>().ok()?;
+    payload["dist-tags"][dist_tag]
+        .as_str()
+        .map(ToString::to_string)
+}
+
+fn resolve_registry_override() -> Option<String> {
+    config::get_config_value("selfUpdateRegistry")
+        .as_str()
+        .map(|value| value.trim_end_matches('/').to_string())
 }
 
 fn is_version_newer(candidate: &str, current: &str) -> bool {
