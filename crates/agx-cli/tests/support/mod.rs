@@ -85,10 +85,5 @@ pub fn stdout_text(output: &Output) -> String {
 }
 
 fn build_test_path(workspace: &TestWorkspace) -> OsString {
-    let mut paths = vec![workspace.bin_dir()];
-    if let Some(existing) = std::env::var_os("PATH") {
-        paths.extend(std::env::split_paths(&existing));
-    }
-
-    std::env::join_paths(paths).expect("failed to join PATH")
+    std::env::join_paths([workspace.bin_dir()]).expect("failed to join PATH")
 }
