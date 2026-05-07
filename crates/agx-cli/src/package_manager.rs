@@ -234,6 +234,22 @@ pub fn update_agent(
     }
 }
 
+pub fn update_agents_by_type(install_type: &str, packages: &[String]) -> Result<(), AgxError> {
+    let mut unique_packages = Vec::new();
+    for package in packages {
+        if !unique_packages.contains(package) {
+            unique_packages.push(package.clone());
+        }
+    }
+
+    if unique_packages.is_empty() {
+        return Ok(());
+    }
+
+    let command = update_many_command(install_type, &unique_packages)?;
+    run_external_command(&command, AgxErrorCode::UpdateFailed)
+}
+
 fn update_managed_agent(
     agent: AgentDefinition,
     installed_state: Option<&InstalledAgentState>,
@@ -450,6 +466,32 @@ fn update_command(install_type: &str, package: &str) -> Vec<String> {
             "--latest".to_string(),
             package.to_string(),
         ],
+    }
+}
+
+fn update_many_command(install_type: &str, packages: &[String]) -> Result<Vec<String>, AgxError> {
+    let strategy = npm_bun_update_strategy();
+    match (install_type, strategy) {
+        ("npm", "respect-semver") => Ok(std::iter::once("npm".to_string())
+            .chain(["update", "-g"].into_iter().map(str::to_string))
+            .chain(packages.iter().cloned())
+            .collect()),
+        ("npm", _) => Ok(std::iter::once("npm".to_string())
+            .chain(["install", "-g"].into_iter().map(str::to_string))
+            .chain(packages.iter().map(|package| format!("{package}@latest")))
+            .collect()),
+        ("bun", "respect-semver") => Ok(std::iter::once("bun".to_string())
+            .chain(["update", "-g"].into_iter().map(str::to_string))
+            .chain(packages.iter().cloned())
+            .collect()),
+        ("bun", _) => Ok(std::iter::once("bun".to_string())
+            .chain(["update", "-g", "--latest"].into_iter().map(str::to_string))
+            .chain(packages.iter().cloned())
+            .collect()),
+        _ => Err(AgxError::new(
+            AgxErrorCode::InvalidArgument,
+            format!("Unsupported managed update type: {install_type}"),
+        )),
     }
 }
 

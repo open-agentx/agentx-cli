@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 
 use crate::agents::{self, AgentDefinition};
@@ -204,6 +206,14 @@ struct LifecycleAgent {
 struct UpdateData {
     results: Vec<package_manager::UpdateResult>,
     scope: &'static str,
+}
+
+#[derive(Debug, Clone)]
+struct PendingGroupedUpdate {
+    agent: AgentDefinition,
+    installed_state: crate::state::InstalledAgentState,
+    installed_version: Option<String>,
+    latest_version: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -669,6 +679,7 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
             context,
         );
         let mut results = Vec::new();
+        let mut grouped_updates: BTreeMap<String, Vec<PendingGroupedUpdate>> = BTreeMap::new();
         for agent in agents::all_agents() {
             let inspection = resolved_agent_inspection(*agent, context);
             let installed_state = crate::state::get_installed_agent_state(agent.name);
@@ -695,8 +706,7 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                     status: "manual-required",
                     strategy: Some("manual-hint".to_string()),
                 };
-                emit_update_progress(&result, context);
-                results.push(result);
+                push_update_result(&mut results, result, context);
                 continue;
             }
 
@@ -714,8 +724,7 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                     status: "up-to-date",
                     strategy: Some(inspection.update_label.clone()),
                 };
-                emit_update_progress(&result, context);
-                results.push(result);
+                push_update_result(&mut results, result, context);
                 continue;
             }
 
@@ -740,39 +749,41 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                     status: "manual-required",
                     strategy: Some("manual-hint".to_string()),
                 };
-                emit_update_progress(&result, context);
-                results.push(result);
+                push_update_result(&mut results, result, context);
                 continue;
             }
 
-            let result = normalize_update_result(
+            if let Some(installed_state) = installed_state.as_ref()
+                && matches!(installed_state.install_type.as_str(), "bun" | "npm")
+                && installed_state.package_name.is_some()
+            {
+                grouped_updates
+                    .entry(installed_state.install_type.clone())
+                    .or_default()
+                    .push(PendingGroupedUpdate {
+                        agent: *agent,
+                        installed_state: installed_state.clone(),
+                        installed_version: inspection.installed_version.clone(),
+                        latest_version: inspection.latest_version.clone(),
+                    });
+                continue;
+            }
+
+            let result = perform_update(
                 *agent,
-                package_manager::update_agent(
-                    *agent,
-                    installed_state.as_ref(),
-                    inspection.installed_version.clone(),
-                    inspection.latest_version.clone(),
-                    context,
-                )
-                .unwrap_or_else(|error| package_manager::UpdateResult {
-                    display_name: agent.display_name.to_string(),
-                    hint: None,
-                    installed_version: None,
-                    latest_version: None,
-                    name: agent.name.to_string(),
-                    message: Some(error.message),
-                    resource: None,
-                    status: if matches!(error.code, AgxErrorCode::ResourceLocked) {
-                        "locked"
-                    } else {
-                        "failed"
-                    },
-                    strategy: Some(inspection.update_label.clone()),
-                }),
+                installed_state.as_ref(),
                 inspection.installed_version.as_deref(),
+                inspection.latest_version.as_deref(),
+                context,
+                Some(inspection.update_label.clone()),
             );
-            emit_update_progress(&result, context);
-            results.push(result);
+            push_update_result(&mut results, result, context);
+        }
+
+        for bucket in grouped_updates.into_values() {
+            for result in perform_grouped_updates(bucket, context) {
+                push_update_result(&mut results, result, context);
+            }
         }
 
         for installed_state in crate::state::load_state().installed_agents.into_values() {
@@ -788,8 +799,7 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                     status: "manual-required",
                     strategy: None,
                 };
-                emit_update_progress(&result, context);
-                results.push(result);
+                push_update_result(&mut results, result, context);
             }
         }
 
@@ -938,6 +948,132 @@ fn emit_update_progress(result: &package_manager::UpdateResult, context: &CliCon
         Some(CommandTarget::agent(result.name.clone())),
         context,
     );
+}
+
+fn push_update_result(
+    results: &mut Vec<package_manager::UpdateResult>,
+    result: package_manager::UpdateResult,
+    context: &CliContext,
+) {
+    emit_update_progress(&result, context);
+    results.push(result);
+}
+
+fn perform_grouped_updates(
+    bucket: Vec<PendingGroupedUpdate>,
+    context: &CliContext,
+) -> Vec<package_manager::UpdateResult> {
+    if bucket.is_empty() {
+        return Vec::new();
+    }
+
+    let install_type = bucket[0].installed_state.install_type.clone();
+    if context.dry_run {
+        return bucket
+            .into_iter()
+            .map(|entry| package_manager::UpdateResult {
+                display_name: entry.agent.display_name.to_string(),
+                hint: None,
+                installed_version: entry.installed_version,
+                latest_version: entry.latest_version,
+                name: entry.agent.name.to_string(),
+                message: Some(format!(
+                    "Dry run: would update {}.",
+                    entry.agent.display_name
+                )),
+                resource: None,
+                status: "planned",
+                strategy: Some(format!("managed/{install_type}")),
+            })
+            .collect();
+    }
+
+    let packages = bucket
+        .iter()
+        .filter_map(|entry| entry.installed_state.package_name.clone())
+        .collect::<Vec<_>>();
+
+    match package_manager::update_agents_by_type(&install_type, &packages) {
+        Ok(()) => bucket
+            .into_iter()
+            .map(|entry| package_manager::UpdateResult {
+                display_name: entry.agent.display_name.to_string(),
+                hint: None,
+                installed_version: entry.installed_version,
+                latest_version: entry.latest_version,
+                name: entry.agent.name.to_string(),
+                message: None,
+                resource: None,
+                status: "updated",
+                strategy: Some(format!("managed/{install_type}")),
+            })
+            .collect(),
+        Err(error) if matches!(error.code, AgxErrorCode::ResourceLocked) => bucket
+            .into_iter()
+            .map(|entry| package_manager::UpdateResult {
+                display_name: entry.agent.display_name.to_string(),
+                hint: None,
+                installed_version: entry.installed_version,
+                latest_version: entry.latest_version,
+                name: entry.agent.name.to_string(),
+                message: Some(error.message.clone()),
+                resource: None,
+                status: "locked",
+                strategy: Some(format!("managed/{install_type}")),
+            })
+            .collect(),
+        Err(_) => bucket
+            .into_iter()
+            .map(|entry| {
+                perform_update(
+                    entry.agent,
+                    Some(&entry.installed_state),
+                    entry.installed_version.as_deref(),
+                    entry.latest_version.as_deref(),
+                    context,
+                    Some(format!("managed/{install_type}")),
+                )
+            })
+            .collect(),
+    }
+}
+
+fn perform_update(
+    agent: AgentDefinition,
+    installed_state: Option<&crate::state::InstalledAgentState>,
+    installed_version: Option<&str>,
+    latest_version: Option<&str>,
+    context: &CliContext,
+    fallback_strategy: Option<String>,
+) -> package_manager::UpdateResult {
+    let installed_version_owned = installed_version.map(str::to_string);
+    let latest_version_owned = latest_version.map(str::to_string);
+    normalize_update_result(
+        agent,
+        package_manager::update_agent(
+            agent,
+            installed_state,
+            installed_version_owned.clone(),
+            latest_version_owned.clone(),
+            context,
+        )
+        .unwrap_or_else(|error| package_manager::UpdateResult {
+            display_name: agent.display_name.to_string(),
+            hint: None,
+            installed_version: installed_version_owned.clone(),
+            latest_version: latest_version_owned.clone(),
+            name: agent.name.to_string(),
+            message: Some(error.message),
+            resource: None,
+            status: if matches!(error.code, AgxErrorCode::ResourceLocked) {
+                "locked"
+            } else {
+                "failed"
+            },
+            strategy: fallback_strategy,
+        }),
+        installed_version,
+    )
 }
 
 fn normalize_update_result(

@@ -695,6 +695,106 @@ fn update_all_human_output_includes_summary_counts() {
 }
 
 #[test]
+fn update_all_batches_bun_managed_updates_into_one_command() {
+    let workspace = TestWorkspace::new();
+    let capture_path = workspace.root().join("commands.log");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "codex": {
+      "agentName": "codex",
+      "installType": "bun",
+      "packageName": "@openai/codex",
+      "packageTargetKind": "package"
+    },
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let capture = capture_path.to_string_lossy().into_owned();
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "--all"],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_CAPTURE_COMMAND_PATH", &capture),
+            ("AGX_TEST_LATEST_PACKAGE__OPENAI_CODEX", "0.2.0"),
+            ("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "0.2.0"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let captured = fs::read_to_string(capture_path).expect("capture file should exist");
+    let lines = captured
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>();
+    assert_eq!(lines.len(), 1);
+    assert!(lines[0].contains("bun update -g --latest"));
+    assert!(lines[0].contains("@openai/codex"));
+    assert!(lines[0].contains("@qoder-ai/qodercli"));
+}
+
+#[test]
+fn update_all_batches_npm_respect_semver_updates_into_one_command() {
+    let workspace = TestWorkspace::new();
+    let capture_path = workspace.root().join("commands.log");
+    workspace.write_config_bytes(br#"{"npmBunUpdateStrategy":"respect-semver"}"#);
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "codex": {
+      "agentName": "codex",
+      "installType": "npm",
+      "packageName": "@openai/codex",
+      "packageTargetKind": "package"
+    },
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let capture = capture_path.to_string_lossy().into_owned();
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "--all"],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_CAPTURE_COMMAND_PATH", &capture),
+            ("AGX_TEST_LATEST_PACKAGE__OPENAI_CODEX", "0.2.0"),
+            ("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "0.2.0"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let captured = fs::read_to_string(capture_path).expect("capture file should exist");
+    let lines = captured
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>();
+    assert_eq!(lines.len(), 1);
+    assert!(lines[0].contains("npm update -g"));
+    assert!(lines[0].contains("@openai/codex"));
+    assert!(lines[0].contains("@qoder-ai/qodercli"));
+    assert!(!lines[0].contains("@latest"));
+}
+
+#[test]
 fn update_ndjson_emits_single_result_event() {
     let workspace = TestWorkspace::new();
     workspace.write_state_bytes(
