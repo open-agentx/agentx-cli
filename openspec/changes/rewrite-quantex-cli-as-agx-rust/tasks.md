@@ -39,10 +39,11 @@
 
 - [x] 4.1 Capture compatibility fixtures for command catalog, schema summary, agent catalog, and representative error envelope.
 - [x] 4.2 Define fixture update policy.
-- [x] 4.3 Add AGX agent workflow bootstrap, OpenSpec README/config, and project-memory spec.
-- [x] 4.4 Add task-start and worktree runbooks.
-- [x] 4.5 Add Rust workspace architecture ADR.
-- [x] 4.6 Add release and package-distribution runbook.
+- [x] 4.3 Add Rust integration tests under `crates/agx-cli/tests` for CLI contracts, compatible config/state, and execution flows.
+- [x] 4.4 Add AGX agent workflow bootstrap, OpenSpec README/config, and project-memory spec.
+- [x] 4.5 Add task-start and worktree runbooks.
+- [x] 4.6 Add Rust workspace architecture ADR.
+- [x] 4.7 Add release and package-distribution runbook.
 
 ## 5. GitHub Actions
 
