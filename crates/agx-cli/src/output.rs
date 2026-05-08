@@ -715,7 +715,7 @@ fn render_info(result: &CommandResult) {
         for method in methods {
             println!(
                 "    [{}] {}",
-                method["label"].as_str().unwrap_or("unknown"),
+                human_install_method_label(method),
                 method["command"].as_str().unwrap_or("")
             );
         }
@@ -819,7 +819,7 @@ fn render_inspect(result: &CommandResult) {
         for method in methods {
             println!(
                 "    [{}] {}",
-                method["label"].as_str().unwrap_or("unknown"),
+                human_install_method_label(method),
                 method["command"].as_str().unwrap_or("")
             );
         }
@@ -1082,4 +1082,17 @@ fn render_exec(result: &CommandResult) {
 
 fn yes_no(value: Option<bool>) -> &'static str {
     if value.unwrap_or(false) { "yes" } else { "no" }
+}
+
+fn human_install_method_label(method: &Value) -> String {
+    match method["type"].as_str() {
+        Some("bun") => "managed/bun".to_string(),
+        Some("npm") => "managed/npm".to_string(),
+        Some(other) => method["label"]
+            .as_str()
+            .map_or_else(|| other.to_string(), ToString::to_string),
+        None => method["label"]
+            .as_str()
+            .map_or_else(|| "unknown".to_string(), ToString::to_string),
+    }
 }

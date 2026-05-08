@@ -344,6 +344,7 @@ fn info_human_output_includes_install_methods_and_source_details() {
     assert!(stdout.contains("Qoder CLI"));
     assert!(stdout.contains("managed via bun (@qoder-ai/qodercli)"));
     assert!(stdout.contains("Install Methods"));
+    assert!(stdout.contains("managed/bun"));
     assert!(stdout.contains("bun add -g @qoder-ai/qodercli"));
 }
 
