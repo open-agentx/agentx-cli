@@ -385,7 +385,7 @@ fn ensure_human_output_shows_install_progress_and_success() {
 
     assert!(output.status.success());
     let stdout = stdout_text(&output);
-    assert!(stdout.contains("Ensuring Qoder CLI..."));
+    assert!(stdout.contains("Installing Qoder CLI..."));
     assert!(stdout.contains("Qoder CLI is now installed."));
 }
 
@@ -603,7 +603,7 @@ fn uninstall_human_output_shows_progress_and_success() {
     assert!(output.status.success());
     let stdout = stdout_text(&output);
     assert!(stdout.contains("Uninstalling Qoder CLI..."));
-    assert!(stdout.contains("Qoder CLI uninstalled successfully"));
+    assert!(stdout.contains("Qoder CLI uninstalled successfully!"));
 }
 
 #[test]

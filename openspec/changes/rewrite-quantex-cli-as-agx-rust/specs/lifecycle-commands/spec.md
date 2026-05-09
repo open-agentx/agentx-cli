@@ -91,6 +91,11 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - THEN AGX returns an `AGENT_NOT_FOUND` result
 - AND uses the stable unknown-agent exit code
 
+#### Scenario: Ensure and uninstall preserve familiar human lifecycle wording
+
+- WHEN the user runs `agx ensure <agent>` or `agx uninstall <agent>` in human output mode
+- THEN AGX renders progress and success lines with the same install/uninstall wording style used by the reference CLI
+
 #### Scenario: Explicit execution auto-installs in non-interactive mode when requested
 
 - GIVEN the requested agent is not installed

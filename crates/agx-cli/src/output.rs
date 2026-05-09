@@ -1274,7 +1274,7 @@ fn render_ensure(result: &CommandResult) {
         return;
     }
 
-    println!("Ensuring {display_name}...");
+    println!("Installing {display_name}...");
     println!("{display_name} is now installed.");
 }
 
@@ -1299,7 +1299,7 @@ fn render_uninstall(result: &CommandResult) {
     }
 
     println!("Uninstalling {display_name}...");
-    println!("{display_name} uninstalled successfully");
+    println!("{display_name} uninstalled successfully!");
 }
 
 fn render_install_batch(data: &Value) {
