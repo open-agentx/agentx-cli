@@ -34,7 +34,11 @@ fn capabilities_human_output_stays_readable() {
     assert!(output.status.success());
     let stdout = stdout_text(&output);
     assert!(stdout.contains("AGX Capabilities"));
-    assert!(stdout.contains("agx capabilities --json"));
+    assert!(stdout.contains("Output Modes:"));
+    assert!(stdout.contains("Installers:"));
+    assert!(stdout.contains("Features:"));
+    assert!(stdout.contains("color-modes:"));
+    assert!(stdout.contains("exec-install-policy:"));
 }
 
 #[test]

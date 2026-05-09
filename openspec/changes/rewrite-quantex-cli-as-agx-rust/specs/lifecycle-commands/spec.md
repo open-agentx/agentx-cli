@@ -140,6 +140,13 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - AND shows the latest version when available
 - AND includes the agent install methods in human-readable form
 
+#### Scenario: Human-readable catalog and capability views align with the stable surface
+
+- WHEN the user runs `agx list`, `agx info <agent>`, `agx inspect <agent>`, or `agx capabilities`
+- THEN AGX renders install method labels as `bun` and `npm` for managed package installs
+- AND `agx list` uses stable column-style human output with status, version, update mode, and source details
+- AND `agx capabilities` renders platform, output modes, agents, installers, and full feature coverage in the stable order
+
 #### Scenario: Doctor reports manual update guidance for unmanaged PATH agents
 
 - GIVEN an agent is visible in PATH but not tracked as a managed install

@@ -362,20 +362,60 @@ fn render_capabilities(result: &CommandResult) {
         data["platform"]["arch"].as_str().unwrap_or("unknown")
     );
     println!(
-        "Agents:   {}",
-        data["agents"].as_array().map_or(0, std::vec::Vec::len)
+        "Output Modes: {}",
+        data["outputModes"]
+            .as_array()
+            .map(|modes| {
+                modes
+                    .iter()
+                    .filter_map(|mode| mode.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default()
+    );
+    println!(
+        "Agents: {}",
+        data["agents"]
+            .as_array()
+            .map(|agents| {
+                agents
+                    .iter()
+                    .filter_map(|agent| agent.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default()
     );
 
+    println!("\nInstallers:");
+    for installer in ["bun", "npm", "brew", "winget"] {
+        let available = data["installers"][installer]["available"]
+            .as_bool()
+            .unwrap_or(false);
+        println!(
+            "  {installer}: {}",
+            if available { "available" } else { "not found" }
+        );
+    }
+
     println!("\nFeatures:");
-    for (label, key) in [
-        ("--yes", "assumeYes"),
-        ("dry-run", "dryRun"),
-        ("self-upgrade", "selfUpgrade"),
-        ("exec-install-policy", "execInstallPolicies"),
-        ("cache-refresh", "cacheRefresh"),
-        ("cache-bypass", "cacheBypass"),
+    for (label, key, mode) in [
+        ("--yes", "assumeYes", "bool"),
+        ("cache-refresh", "cacheRefresh", "bool"),
+        ("color-modes", "colorModes", "list"),
+        ("no-cache", "cacheBypass", "bool"),
+        ("dry-run", "dryRun", "bool"),
+        ("freshness-metadata", "freshnessMetadata", "bool"),
+        ("self-upgrade", "selfUpgrade", "bool"),
+        ("idempotency-key", "idempotencyKey", "bool"),
+        ("log-levels", "logLevels", "list"),
+        ("quiet-logs", "quietLogs", "bool"),
+        ("timeout", "timeout", "bool"),
+        ("channels", "channels", "list"),
+        ("exec-install-policy", "execInstallPolicies", "list"),
     ] {
-        let value = if key == "execInstallPolicies" {
+        let value = if mode == "list" {
             data["features"][key].as_array().map_or_else(
                 || "unknown".to_string(),
                 |items| {
@@ -393,19 +433,7 @@ fn render_capabilities(result: &CommandResult) {
         };
         println!("  {label}: {value}");
     }
-
-    println!("\nInstallers:");
-    for installer in ["bun", "npm", "brew", "winget"] {
-        let available = data["installers"][installer]["available"]
-            .as_bool()
-            .unwrap_or(false);
-        println!(
-            "  {installer}: {}",
-            if available { "available" } else { "not found" }
-        );
-    }
-
-    println!("\nRun `agx capabilities --json` for machine-readable capability data.\n");
+    println!();
 }
 
 fn render_commands(result: &CommandResult) {
@@ -634,35 +662,41 @@ fn render_list(result: &CommandResult) {
         .and_then(|data| data["agents"].as_array())
     {
         for agent in agents {
-            let status = if agent["installed"].as_bool().unwrap_or(false) {
+            let installed = agent["installed"].as_bool().unwrap_or(false);
+            let name = agent["displayName"].as_str().unwrap_or("unknown");
+            let name_padded = format!("{name:<18}");
+            let status = if installed {
                 "installed"
             } else {
                 "not installed"
             };
-            let installed = agent["installed"].as_bool().unwrap_or(false);
             let version = agent["installedVersion"].as_str().unwrap_or("");
             let update = agent["updateLabel"].as_str().unwrap_or("");
             let source = agent["sourceLabel"].as_str().unwrap_or("");
+            let version_text = if installed {
+                if version.is_empty() {
+                    "unknown version".to_string()
+                } else {
+                    version.to_string()
+                }
+            } else {
+                String::new()
+            };
             println!(
-                "  {}: {}{}{}{}",
-                agent["displayName"].as_str().unwrap_or("unknown"),
-                status,
-                if version.is_empty() && installed {
-                    " (unknown version)".to_string()
-                } else if version.is_empty() {
+                "  {name_padded} {status}{}{}",
+                if version_text.is_empty() {
                     String::new()
                 } else {
-                    format!(" ({version})")
+                    format!("  {version_text}")
                 },
-                if update.is_empty() {
+                if update.is_empty() && source.is_empty() {
                     String::new()
+                } else if update.is_empty() {
+                    format!("  {source}")
+                } else if source.is_empty() {
+                    format!("  {update}")
                 } else {
-                    format!(" [{update}]")
-                },
-                if source.is_empty() {
-                    String::new()
-                } else {
-                    format!(" {source}")
+                    format!("  {update}  {source}")
                 }
             );
         }
@@ -1338,8 +1372,8 @@ fn yes_no(value: Option<bool>) -> &'static str {
 
 fn human_install_method_label(method: &Value) -> String {
     match method["type"].as_str() {
-        Some("bun") => "managed/bun".to_string(),
-        Some("npm") => "managed/npm".to_string(),
+        Some("bun") => "bun".to_string(),
+        Some("npm") => "npm".to_string(),
         Some(other) => method["label"]
             .as_str()
             .map_or_else(|| other.to_string(), ToString::to_string),

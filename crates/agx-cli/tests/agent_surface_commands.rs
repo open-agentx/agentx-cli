@@ -95,8 +95,9 @@ fn list_human_output_shows_unknown_version_for_installed_agents_without_probe_re
 
     assert!(output.status.success());
     let stdout = stdout_text(&output);
-    assert!(stdout.contains("Amp: installed (unknown version)"));
-    assert!(stdout.contains("[command update]"));
+    assert!(stdout.contains("Amp"));
+    assert!(stdout.contains("installed  unknown version"));
+    assert!(stdout.contains("command update"));
     assert!(stdout.contains("detected in PATH"));
 }
 
@@ -108,7 +109,8 @@ fn list_human_output_marks_missing_agents_as_not_installed() {
 
     assert!(output.status.success());
     let stdout = stdout_text(&output);
-    assert!(stdout.contains("Qoder CLI: not installed"));
+    assert!(stdout.contains("Qoder CLI"));
+    assert!(stdout.contains("not installed"));
 }
 
 #[test]
@@ -165,6 +167,28 @@ fn inspect_exposes_install_methods_and_self_update_metadata() {
 fn inspect_human_output_shows_latest_version_for_installed_agent() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
+    fs::create_dir_all(
+        workspace
+            .cache_file()
+            .parent()
+            .expect("cache parent should exist"),
+    )
+    .expect("cache directory should be created");
+    fs::write(
+        workspace.cache_file(),
+        concat!(
+            "{\n",
+            "  \"entries\": {\n",
+            "    \"npm:https://registry.npmjs.org:@qoder-ai/qodercli:latest\": {\n",
+            "      \"body\": \"{\\\"version\\\":\\\"9.9.9\\\"}\",\n",
+            "      \"expiresAt\": 4102444800000,\n",
+            "      \"fetchedAt\": 4102441200000\n",
+            "    }\n",
+            "  }\n",
+            "}\n"
+        ),
+    )
+    .expect("cache file should be written");
     workspace.write_state_bytes(
         br#"{
   "installedAgents": {
@@ -184,7 +208,7 @@ fn inspect_human_output_shows_latest_version_for_installed_agent() {
 
     assert!(output.status.success());
     let stdout = stdout_text(&output);
-    assert!(stdout.contains("Latest:       0.1.0"));
+    assert!(stdout.contains("Latest:       9.9.9"));
 }
 
 #[test]
@@ -408,7 +432,7 @@ fn info_human_output_includes_install_methods_and_source_details() {
     assert!(stdout.contains("Qoder CLI"));
     assert!(stdout.contains("managed via bun (@qoder-ai/qodercli)"));
     assert!(stdout.contains("Install Methods"));
-    assert!(stdout.contains("managed/bun"));
+    assert!(stdout.contains("[bun]"));
     assert!(stdout.contains("bun add -g @qoder-ai/qodercli"));
 }
 
@@ -493,6 +517,37 @@ fn list_reads_cached_latest_version_metadata() {
         .find(|agent| agent["name"] == "qoder")
         .expect("qoder should exist");
     assert_eq!(qoder["latestVersion"], "9.9.9");
+}
+
+#[test]
+fn list_human_output_uses_column_style_layout() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx(&workspace, &["list"]);
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("AI Agents:"));
+    assert!(stdout.contains("Qoder CLI"));
+    assert!(stdout.contains("installed"));
+    assert!(stdout.contains("0.1.0"));
+    assert!(stdout.contains("managed update"));
+    assert!(stdout.contains("managed via bun (@qoder-ai/qodercli)"));
 }
 
 #[test]
