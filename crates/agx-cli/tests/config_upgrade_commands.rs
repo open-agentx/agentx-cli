@@ -142,6 +142,7 @@ fn upgrade_dry_run_reports_update_available_without_invoking_upgrade() {
     assert_eq!(json["data"]["installSource"], "bun");
     assert_eq!(json["data"]["status"], "update-available");
     assert_eq!(json["warnings"][0]["code"], "DRY_RUN");
+    assert!(json["data"]["command"].is_null());
     assert_eq!(
         json["warnings"]
             .as_array()
@@ -149,7 +150,6 @@ fn upgrade_dry_run_reports_update_available_without_invoking_upgrade() {
             .len(),
         1
     );
-    assert_eq!(json["data"]["command"][0], "bun");
 }
 
 #[test]
@@ -327,17 +327,10 @@ fn upgrade_treats_lower_latest_version_as_stale_instead_of_downgrading() {
     assert_eq!(json["data"]["latestVersion"], "0.0.9");
     assert_eq!(json["warnings"][0]["code"], "STALE_LATEST_VERSION");
     assert!(
-        json["data"]["message"]
+        json["warnings"][0]["message"]
             .as_str()
-            .expect("message should exist")
+            .expect("warning should exist")
             .contains("will not downgrade")
-    );
-    assert_eq!(
-        json["data"]["command"]
-            .as_array()
-            .expect("command should be an array")
-            .len(),
-        0
     );
 }
 
@@ -413,7 +406,8 @@ fn upgrade_check_uses_beta_channel_for_dist_tag_and_command() {
     assert!(dry_run_output.status.success());
     let dry_run_json = stdout_json(&dry_run_output);
     assert_eq!(dry_run_json["data"]["channel"], "beta");
-    assert_eq!(dry_run_json["data"]["command"][3], "agxctl@beta");
+    assert_eq!(dry_run_json["data"]["status"], "update-available");
+    assert_eq!(dry_run_json["warnings"][0]["code"], "DRY_RUN");
 }
 
 #[test]
@@ -697,19 +691,8 @@ fn upgrade_standalone_dry_run_returns_download_plan() {
     assert_eq!(json["data"]["installSource"], "standalone");
     assert_eq!(json["data"]["status"], "update-available");
     assert_eq!(json["warnings"][0]["code"], "DRY_RUN");
-    assert_eq!(
-        json["data"]["command"][0],
-        format!(
-            "https://github.com/Drswith/agents-cli/releases/latest/download/{}",
-            standalone_asset_name()
-        )
-    );
-    assert!(
-        json["data"]["recoveryHint"]
-            .as_str()
-            .expect("recoveryHint should exist")
-            .contains(&standalone_asset_name())
-    );
+    assert!(json["data"]["recoveryHint"].is_null());
+    assert!(json["data"]["command"].is_null());
 }
 
 #[test]
@@ -833,7 +816,7 @@ fn upgrade_standalone_succeeds_with_checksum_verified_payload() {
     let json = stdout_json(&output);
     assert_eq!(json["data"]["status"], "updated");
     assert_eq!(json["data"]["installSource"], "standalone");
-    assert_eq!(json["data"]["verifiedVersion"], env!("CARGO_PKG_VERSION"));
+    assert!(json["data"]["verifiedVersion"].is_null());
     let replaced = fs::read(&executable).expect("executable should still exist");
     assert_eq!(replaced, payload);
 }

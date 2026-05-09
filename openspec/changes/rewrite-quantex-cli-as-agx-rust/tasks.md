@@ -64,6 +64,7 @@
 - [x] 4.3.22 Close remaining self-upgrade warning and failure-contract parity gaps from `quantex-cli/src/commands/upgrade.ts`, including dry-run `check-unavailable` handling, `MANUAL_RECOVERY` warnings, and machine-readable failure kinds.
 - [x] 4.3.23 Close latest update human-output parity gaps from `quantex-cli/src/commands/update.ts`, including successful transition messaging, failure preambles, and recovery-hint rendering.
 - [x] 4.3.24 Close latest update lock-detail parity gaps from `quantex-cli/src/commands/update.ts`, including machine-readable `resource` details for lifecycle lock conflicts.
+- [x] 4.3.25 Close remaining self-upgrade payload-shape parity gaps from `quantex-cli/src/commands/upgrade.ts`, including removal of AGX-only result fields and `recoveryHint` scoping to `manual-required`.
 - [x] 4.4 Add AGX agent workflow bootstrap, OpenSpec README/config, and project-memory spec.
 - [x] 4.5 Add task-start and worktree runbooks.
 - [x] 4.6 Add Rust workspace architecture ADR.

@@ -191,6 +191,8 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - THEN AGX reports `update-available`, `up-to-date`, `manual-required`, `check-unavailable`, or `updated` status values
 - AND successful upgrade output reports the current-to-latest version transition when known
 - AND available-update output reports the current and latest versions together with the selected channel
+- AND structured upgrade results expose only the stable quantex-compatible field set
+- AND `recoveryHint` is emitted only for `manual-required` upgrade outcomes
 - AND dry-run upgrade warnings are emitted only for `update-available` planning outcomes
 - AND failed auto-upgrade results expose machine-readable failure kind metadata together with a manual recovery warning when AGX can suggest the next step
 

@@ -278,6 +278,16 @@ fn schema_upgrade_reflects_channel_and_version_fields() {
             .iter()
             .any(|item| item["name"] == "latestVersion")
     );
+    assert!(properties.iter().any(|item| item["name"] == "recoveryHint"));
+    assert!(!properties.iter().any(|item| item["name"] == "command"));
+    assert!(!properties.iter().any(|item| item["name"] == "dryRun"));
+    assert!(!properties.iter().any(|item| item["name"] == "message"));
+    assert!(!properties.iter().any(|item| item["name"] == "packageName"));
+    assert!(
+        !properties
+            .iter()
+            .any(|item| item["name"] == "verifiedVersion")
+    );
 }
 
 #[test]

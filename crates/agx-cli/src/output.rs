@@ -1096,9 +1096,6 @@ fn render_upgrade(result: &CommandResult) {
         "up-to-date" => {
             let current = data["currentVersion"].as_str().unwrap_or("unknown");
             println!("AGX is already up to date ({current}).");
-            if let Some(message) = data["message"].as_str() {
-                println!("{message}");
-            }
             render_upgrade_informational_warnings(&result.warnings);
         }
         "planned" => {
