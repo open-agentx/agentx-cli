@@ -339,7 +339,7 @@ struct Resolution {
     suggested_launch_command: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct InstallGuidance {
     docs_ref: &'static str,
@@ -348,7 +348,7 @@ struct InstallGuidance {
     suggested_ensure_command: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct InstallMethodInfo {
     command: String,
@@ -738,6 +738,11 @@ fn exec_command(
                 if matches!(context.output_mode, crate::context::OutputMode::Human)
                     && matches!(error.code, AgxErrorCode::InvalidArgument)
                     && error.message.contains("Failed to launch ")
+                {
+                    Some(1)
+                } else if matches!(context.output_mode, crate::context::OutputMode::Human)
+                    && matches!(error.code, AgxErrorCode::Cancelled)
+                    && error.message.starts_with("Installation cancelled for ")
                 {
                     Some(1)
                 } else {
@@ -1412,14 +1417,15 @@ fn resolve_command(agent_name: &str, context: &CliContext) -> CommandResult {
     let inspection = resolved_agent_inspection(agent, context);
     let install_methods = install_methods(agent);
     let installed = inspection.installed;
+    let missing_install_guidance = (!installed).then_some(InstallGuidance {
+        docs_ref: "openspec/changes/rewrite-quantex-cli-as-agx-rust/tasks.md",
+        install_methods,
+        suggested_action: "ensure-agent-installed",
+        suggested_ensure_command: format!("agx ensure {}", agent.name),
+    });
     let resolution = Resolution {
         binary_path: inspection.binary_path.clone(),
-        install_guidance: (!installed).then_some(InstallGuidance {
-            docs_ref: "openspec/changes/rewrite-quantex-cli-as-agx-rust/tasks.md",
-            install_methods,
-            suggested_action: "ensure-agent-installed",
-            suggested_ensure_command: format!("agx ensure {}", agent.name),
-        }),
+        install_guidance: missing_install_guidance.clone(),
         installed,
         install_source: if installed {
             install_source_for(agent)
@@ -1454,12 +1460,20 @@ fn resolve_command(agent_name: &str, context: &CliContext) -> CommandResult {
     if installed {
         CommandResult::success("resolve", data, CommandTarget::agent(agent.name), context)
     } else {
-        CommandResult::error_with_data(
+        CommandResult::error_with_data_and_details(
             "resolve",
             data,
             AgxError::new(
                 AgxErrorCode::AgentNotInstalled,
                 format!("{} is not installed.", agent.display_name),
+            ),
+            Some(
+                serde_json::to_value(
+                    missing_install_guidance
+                        .as_ref()
+                        .expect("missing install guidance should exist for missing agents"),
+                )
+                .expect("install guidance should serialize"),
             ),
             CommandTarget::agent(agent.name),
             context,
@@ -1472,12 +1486,13 @@ fn schema_command(command_name: Option<&str>, context: &CliContext) -> CommandRe
     if let Some(command_name) = command_name {
         commands.retain(|schema| schema.name == command_name);
         if commands.is_empty() {
-            return CommandResult::error(
+            return CommandResult::error_with_details(
                 "schema",
                 AgxError::new(
                     AgxErrorCode::InvalidArgument,
                     format!("Unknown schema target: {command_name}"),
                 ),
+                Some(serde_json::json!({ "command": command_name })),
                 CommandTarget::system("schema"),
                 context,
             );
@@ -2003,6 +2018,7 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             "error",
             object_schema(vec![
                 ("code", string_schema()),
+                ("details", loose_object_schema()),
                 ("message", string_schema()),
             ]),
         ),
@@ -2749,12 +2765,13 @@ fn agent_not_found_result(
     agent_name: &str,
     context: &CliContext,
 ) -> CommandResult {
-    CommandResult::error(
+    CommandResult::error_with_details(
         action,
         AgxError::new(
             AgxErrorCode::AgentNotFound,
             format!("Unknown agent: {agent_name}"),
         ),
+        Some(serde_json::json!({ "input": agent_name })),
         CommandTarget::agent(agent_name),
         context,
     )
@@ -2766,9 +2783,15 @@ fn invalid_config_argument(
     context: &CliContext,
 ) -> CommandResult {
     let message = message.into();
-    let mut result = CommandResult::error(
+    let details = message.strip_prefix("Unknown action: ").map(|action| {
+        serde_json::json!({
+            "action": action,
+        })
+    });
+    let mut result = CommandResult::error_with_details(
         "config",
         AgxError::new(AgxErrorCode::InvalidArgument, message.clone()),
+        details,
         CommandTarget::config(key),
         context,
     );
@@ -2789,7 +2812,8 @@ fn exec_missing_result(
     error_code: AgxErrorCode,
     message: String,
 ) -> CommandResult {
-    CommandResult::error_with_data(
+    let install_guidance = exec::install_guidance(agent, args);
+    CommandResult::error_with_data_and_details(
         "exec",
         ExecCommandData {
             agent: exec::ExecAgent {
@@ -2810,7 +2834,7 @@ fn exec_missing_result(
                     crate::cli::InstallPolicyArg::IfMissing => "if-missing",
                     crate::cli::InstallPolicyArg::Always => "always",
                 },
-                install_guidance: Some(exec::install_guidance(agent, args)),
+                install_guidance: Some(install_guidance.clone()),
                 installed_after: false,
                 installed_before: false,
                 message: Some(message.clone()),
@@ -2819,6 +2843,7 @@ fn exec_missing_result(
             },
         },
         AgxError::new(error_code, message),
+        Some(serde_json::to_value(&install_guidance).expect("install guidance should serialize")),
         CommandTarget::agent(agent.name),
         context,
     )
@@ -2876,5 +2901,15 @@ fn primitive_schema(schema_type: &'static str) -> JsonSchema {
         properties: None,
         required: None,
         schema_type,
+    }
+}
+
+fn loose_object_schema() -> JsonSchema {
+    JsonSchema {
+        additional_properties: None,
+        items: None,
+        properties: None,
+        required: None,
+        schema_type: "object",
     }
 }

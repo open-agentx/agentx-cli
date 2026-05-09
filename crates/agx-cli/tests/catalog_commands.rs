@@ -240,6 +240,7 @@ fn schema_unknown_target_returns_invalid_argument() {
             .expect("message should exist")
             .contains("Unknown schema target")
     );
+    assert_eq!(json["error"]["details"]["command"], "missing-command");
 }
 
 #[test]
@@ -471,6 +472,27 @@ fn schema_envelope_and_ndjson_meta_require_core_fields() {
     assert!(meta_required.iter().any(|item| item == "schemaVersion"));
     assert!(meta_required.iter().any(|item| item == "timestamp"));
     assert!(meta_required.iter().any(|item| item == "version"));
+
+    let error = command["envelopeSchema"]["properties"]
+        .as_array()
+        .expect("envelope properties should be an array")
+        .iter()
+        .find(|item| item["name"] == "error")
+        .expect("error property should exist");
+    let error_properties = error["schema"]["properties"]
+        .as_array()
+        .expect("error properties should be an array");
+    assert!(error_properties.iter().any(|item| item["name"] == "code"));
+    assert!(
+        error_properties
+            .iter()
+            .any(|item| item["name"] == "details")
+    );
+    assert!(
+        error_properties
+            .iter()
+            .any(|item| item["name"] == "message")
+    );
 
     let ndjson_required = command["ndjsonEventSchema"]["required"]
         .as_array()

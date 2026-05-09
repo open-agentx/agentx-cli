@@ -136,6 +136,8 @@ fn info_unknown_agent_returns_agent_not_found() {
     assert_eq!(output.status.code(), Some(3));
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "AGENT_NOT_FOUND");
+    assert_eq!(json["error"]["details"]["input"], "missing-agent");
+    assert_eq!(json["error"]["details"]["input"], "missing-agent");
 }
 
 #[test]
@@ -258,6 +260,14 @@ fn resolve_returns_install_guidance_for_missing_binary() {
     assert_eq!(json["data"]["resolution"]["installSource"], "not-installed");
     assert_eq!(json["data"]["resolution"]["lifecycle"], "unmanaged");
     assert_eq!(json["data"]["resolution"]["sourceLabel"], "not installed");
+    assert_eq!(
+        json["error"]["details"]["suggestedEnsureCommand"],
+        "agx ensure qoder"
+    );
+    assert_eq!(
+        json["error"]["details"]["suggestedAction"],
+        "ensure-agent-installed"
+    );
     assert!(
         json["data"]["resolution"]["suggestedLaunchCommand"]
             .as_array()
@@ -274,6 +284,7 @@ fn resolve_unknown_agent_returns_agent_not_found() {
     assert_eq!(output.status.code(), Some(3));
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "AGENT_NOT_FOUND");
+    assert_eq!(json["error"]["details"]["input"], "missing-agent");
 }
 
 #[test]

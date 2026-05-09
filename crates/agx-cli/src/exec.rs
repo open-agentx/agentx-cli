@@ -72,6 +72,8 @@ pub fn execute_agent(
     context: &CliContext,
 ) -> Result<ExecResult, AgxError> {
     let installed_before = inspection::find_binary_in_path(agent.binary_name).is_some();
+    let interactive =
+        context.interactive && matches!(context.output_mode, crate::context::OutputMode::Human);
     let should_prompt_install =
         !installed_before && matches!(install_policy, InstallPolicyArg::Prompt);
 
@@ -110,7 +112,7 @@ pub fn execute_agent(
     }
 
     if should_prompt_install {
-        if !context.interactive && !context.assume_yes {
+        if !interactive && !context.assume_yes {
             return Err(AgxError::new(
                 AgxErrorCode::InteractionRequired,
                 format!(
@@ -120,7 +122,7 @@ pub fn execute_agent(
             ));
         }
 
-        if context.interactive && !context.assume_yes && !confirm_exec_install(agent)? {
+        if interactive && !context.assume_yes && !confirm_exec_install(agent)? {
             return Err(AgxError::new(
                 AgxErrorCode::Cancelled,
                 format!("Installation cancelled for {}.", agent.display_name),

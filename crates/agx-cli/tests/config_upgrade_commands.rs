@@ -66,6 +66,7 @@ fn config_rejects_unknown_actions() {
             .expect("message should exist")
             .contains("Unknown action")
     );
+    assert_eq!(json["error"]["details"]["action"], "delete");
     assert_eq!(json["warnings"][0]["code"], "AVAILABLE_ACTIONS");
     assert_eq!(
         json["warnings"][0]["message"],

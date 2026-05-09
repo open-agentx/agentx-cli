@@ -59,6 +59,8 @@ pub struct CommandWarning {
 #[serde(rename_all = "camelCase")]
 pub struct CommandError {
     pub code: AgxErrorCode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<Value>,
     pub message: String,
 }
 
@@ -150,12 +152,23 @@ impl CommandResult {
         target: CommandTarget,
         context: &CliContext,
     ) -> Self {
+        Self::error_with_details(action, error, None, target, context)
+    }
+
+    pub fn error_with_details(
+        action: impl Into<String>,
+        error: AgxError,
+        details: Option<Value>,
+        target: CommandTarget,
+        context: &CliContext,
+    ) -> Self {
         let exit_code = error.exit_code();
         Self {
             action: action.into(),
             data: None,
             error: Some(CommandError {
                 code: error.code,
+                details,
                 message: error.message,
             }),
             exit_code: Some(exit_code),
@@ -178,6 +191,7 @@ impl CommandResult {
             data: None,
             error: Some(CommandError {
                 code: error.code,
+                details: None,
                 message: error.message,
             }),
             exit_code: Some(exit_code),
@@ -195,12 +209,24 @@ impl CommandResult {
         target: CommandTarget,
         context: &CliContext,
     ) -> Self {
+        Self::error_with_data_and_details(action, data, error, None, target, context)
+    }
+
+    pub fn error_with_data_and_details(
+        action: impl Into<String>,
+        data: impl Serialize,
+        error: AgxError,
+        details: Option<Value>,
+        target: CommandTarget,
+        context: &CliContext,
+    ) -> Self {
         let exit_code = error.exit_code();
         Self {
             action: action.into(),
             data: Some(serde_json::to_value(data).expect("command data must serialize")),
             error: Some(CommandError {
                 code: error.code,
+                details,
                 message: error.message,
             }),
             exit_code: Some(exit_code),

@@ -57,6 +57,7 @@
 - [x] 4.3.15 Close latest capabilities parity gap for dynamic self-upgrade support reporting from `cursor_quantex_cli_command_coverage_dif.md`.
 - [x] 4.3.16 Close latest schema/meta parity gaps from `cursor_quantex_cli_command_coverage_dif.md`, including strict `required[]` arrays, ISO-8601 command metadata timestamps, and cache/network freshness metadata propagation.
 - [x] 4.3.17 Close latest command-catalog flag parity gaps from `cursor_quantex_cli_command_coverage_dif.md`, including `exec`, `install`, `ensure`, and `upgrade` flag listings.
+- [x] 4.3.18 Close latest structured-error parity gaps from `cursor_quantex_cli_command_coverage_dif.md`, including machine-readable `error.details` for unknown-target and missing-install preflight failures.
 - [x] 4.4 Add AGX agent workflow bootstrap, OpenSpec README/config, and project-memory spec.
 - [x] 4.5 Add task-start and worktree runbooks.
 - [x] 4.6 Add Rust workspace architecture ADR.

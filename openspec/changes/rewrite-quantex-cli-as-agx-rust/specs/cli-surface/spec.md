@@ -86,6 +86,12 @@ AGX SHALL publish stable command-catalog and schema-catalog metadata for automat
 - AND commands that consult cached version metadata may include `meta.source`, `meta.fetchedAt`, and `meta.staleAfter`
 - AND cached fallback metadata reports cache freshness instead of pretending a new network refresh happened
 
+#### Scenario: Machine-readable errors expose actionable details
+
+- WHEN AGX emits a structured error for unknown agents, unknown schema targets, invalid config actions, or missing install guidance
+- THEN `error.details` includes the machine-readable input or remediation fields associated with that failure
+- AND execution and resolve preflight failures duplicate install guidance into `error.details` for automation clients
+
 #### Scenario: Human consumer inspects command and schema catalogs
 
 - WHEN the user runs `agx commands` or `agx schema`

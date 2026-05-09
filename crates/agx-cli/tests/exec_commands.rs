@@ -55,6 +55,7 @@ fn explicit_exec_unknown_agent_returns_agent_not_found() {
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "AGENT_NOT_FOUND");
     assert_eq!(json["error"]["message"], "Unknown agent: unknown");
+    assert_eq!(json["error"]["details"]["input"], "unknown");
 }
 
 #[test]
@@ -193,6 +194,14 @@ fn exec_without_install_policy_returns_manual_action_required_when_missing() {
         "rerun-with-install-policy"
     );
     assert_eq!(json["data"]["execution"]["installPolicy"], "prompt");
+    assert_eq!(
+        json["error"]["details"]["suggestedEnsureCommand"],
+        "agx ensure jcode"
+    );
+    assert_eq!(
+        json["error"]["details"]["suggestedExecCommand"],
+        "agx exec jcode --install if-missing -- --version"
+    );
 }
 
 #[test]
