@@ -218,21 +218,29 @@ fn exec_install_policy_alias_is_still_accepted() {
 }
 
 #[test]
-fn shortcut_exec_rejects_structured_output_modes() {
+fn shortcut_exec_supports_structured_output_modes() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
 
-    let output = run_agx(&workspace, &["--json", "qoder", "--", "--version"]);
+    let json_output = run_agx(&workspace, &["--json", "qoder", "--", "--version"]);
 
-    assert_eq!(output.status.code(), Some(2));
-    let json = stdout_json(&output);
-    assert_eq!(json["error"]["code"], "INVALID_ARGUMENT");
-    assert!(
-        json["error"]["message"]
-            .as_str()
-            .expect("message should be a string")
-            .contains("Structured output is not supported")
+    assert!(json_output.status.success());
+    let json = stdout_json(&json_output);
+    assert_eq!(json["action"], "exec");
+    assert_eq!(json["data"]["agent"]["name"], "qoder");
+    assert_eq!(json["data"]["execution"]["installPolicy"], "if-missing");
+
+    let ndjson_output = run_agx(
+        &workspace,
+        &["--output", "ndjson", "qoder", "--", "--version"],
     );
+
+    assert!(ndjson_output.status.success());
+    let lines = stdout_json_lines(&ndjson_output);
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0]["type"], "result");
+    assert_eq!(lines[0]["action"], "exec");
+    assert_eq!(lines[0]["data"]["data"]["agent"]["name"], "qoder");
 }
 
 #[test]

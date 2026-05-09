@@ -98,6 +98,12 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - THEN AGX treats the invocation as shortcut execution for that agent
 - AND uses the same execution behavior as `agx exec`
 
+#### Scenario: Shortcut execution supports structured output modes
+
+- WHEN the user runs `agx <agent> <args>` with `--json` or `--output ndjson`
+- THEN AGX reuses the same structured execution contract as `agx exec`
+- AND returns structured success or error envelopes instead of rejecting the output mode
+
 #### Scenario: Shortcut execution needs an install confirmation
 
 - GIVEN the requested agent is not installed

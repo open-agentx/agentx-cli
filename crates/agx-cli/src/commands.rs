@@ -58,18 +58,6 @@ fn doctor_command(context: &CliContext) -> CommandResult {
 }
 
 fn shortcut_exec_command(args: &[String], context: &CliContext) -> CommandResult {
-    if !matches!(context.output_mode, crate::context::OutputMode::Human) {
-        return CommandResult::error(
-            "exec",
-            AgxError::new(
-                AgxErrorCode::InvalidArgument,
-                "Structured output is not supported for shortcut agent execution yet. Use `agx exec <agent>` instead.",
-            ),
-            CommandTarget::agent(""),
-            context,
-        );
-    }
-
     let Some((agent_name, agent_args)) = args.split_first() else {
         return CommandResult::error(
             "exec",
