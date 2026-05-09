@@ -7,7 +7,7 @@ use reqwest::header::{ETAG, IF_NONE_MATCH, USER_AGENT};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::config;
-use crate::context::{CacheMode, CliContext};
+use crate::context::{CacheMode, CliContext, CliFreshness, FreshnessSource, record_freshness};
 use crate::state;
 
 pub const OFFICIAL_NPM_REGISTRY: &str = "https://registry.npmjs.org";
@@ -50,7 +50,7 @@ pub fn fetch_json_with_cache<T: DeserializeOwned>(
     context: &CliContext,
     user_agent: Option<&str>,
 ) -> Option<T> {
-    let body = fetch_text_with_cache(url, cache_key, context, user_agent)?;
+    let body = fetch_text_with_cache(url, cache_key, context, user_agent, true)?;
     serde_json::from_str(&body).ok()
 }
 
@@ -82,6 +82,7 @@ fn fetch_text_with_cache(
     cache_key: &str,
     context: &CliContext,
     user_agent: Option<&str>,
+    validate_json: bool,
 ) -> Option<String> {
     let settings = network_settings();
     let ttl_ms = settings
@@ -99,6 +100,7 @@ fn fetch_text_with_cache(
         && let Some(entry) = &cached_entry
         && entry.expires_at > now
     {
+        record_freshness(context, freshness_from_cache(entry, ttl_ms));
         return Some(entry.body.clone());
     }
 
@@ -117,6 +119,9 @@ fn fetch_text_with_cache(
     );
 
     let Some(response) = response else {
+        if let Some(entry) = &cached_entry {
+            record_freshness(context, freshness_from_cache(entry, ttl_ms));
+        }
         return cached_entry.map(|entry| entry.body);
     };
 
@@ -128,10 +133,14 @@ fn fetch_text_with_cache(
             cache.entries.insert(cache_key.to_string(), entry.clone());
             let _ = save_response_cache(&cache);
         }
+        record_freshness(context, freshness_from_network(now, entry.expires_at));
         return Some(entry.body);
     }
 
     if !response.status().is_success() {
+        if let Some(entry) = &cached_entry {
+            record_freshness(context, freshness_from_cache(entry, ttl_ms));
+        }
         return cached_entry.map(|entry| entry.body);
     }
 
@@ -141,6 +150,13 @@ fn fetch_text_with_cache(
         .and_then(|value| value.to_str().ok())
         .map(ToString::to_string);
     let body = response.text().ok()?;
+
+    if validate_json && serde_json::from_str::<serde_json::Value>(&body).is_err() {
+        if let Some(entry) = &cached_entry {
+            record_freshness(context, freshness_from_cache(entry, ttl_ms));
+        }
+        return cached_entry.map(|entry| entry.body);
+    }
 
     if !matches!(context.cache_mode, CacheMode::NoCache) {
         cache.entries.insert(
@@ -155,7 +171,46 @@ fn fetch_text_with_cache(
         let _ = save_response_cache(&cache);
     }
 
+    record_freshness(
+        context,
+        freshness_from_network(now, now.saturating_add(ttl_ms)),
+    );
+
     Some(body)
+}
+
+fn freshness_from_cache(entry: &CachedResponseEntry, ttl_ms: u64) -> CliFreshness {
+    let fetched_at_ms = entry
+        .fetched_at
+        .unwrap_or_else(|| entry.expires_at.saturating_sub(ttl_ms));
+    CliFreshness {
+        fetched_at: timestamp_ms_to_iso8601(fetched_at_ms),
+        source: FreshnessSource::Cache,
+        stale_after: timestamp_ms_to_iso8601(entry.expires_at),
+    }
+}
+
+fn freshness_from_network(fetched_at: u64, stale_after: u64) -> CliFreshness {
+    CliFreshness {
+        fetched_at: timestamp_ms_to_iso8601(fetched_at),
+        source: FreshnessSource::Network,
+        stale_after: timestamp_ms_to_iso8601(stale_after),
+    }
+}
+
+fn timestamp_ms_to_iso8601(timestamp_ms: u64) -> String {
+    use time::OffsetDateTime;
+    use time::macros::format_description;
+
+    let seconds = (timestamp_ms / 1_000) as i64;
+    let nanos = ((timestamp_ms % 1_000) * 1_000_000) as i32;
+    const ISO_8601_MILLIS: &[time::format_description::FormatItem<'static>] =
+        format_description!("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z");
+    OffsetDateTime::from_unix_timestamp(seconds)
+        .map(|datetime| datetime + time::Duration::nanoseconds(i64::from(nanos)))
+        .ok()
+        .and_then(|datetime| datetime.format(ISO_8601_MILLIS).ok())
+        .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_string())
 }
 
 fn fetch_with_retries(

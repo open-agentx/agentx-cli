@@ -482,6 +482,12 @@ fn inspect_manual_only_agent_marks_auto_install_as_unavailable() {
 #[test]
 fn list_reads_cached_latest_version_metadata() {
     let workspace = TestWorkspace::new();
+    workspace.write_config_bytes(
+        br#"{
+  "selfUpdateRegistry": "http://127.0.0.1:9"
+}
+"#,
+    );
     fs::create_dir_all(
         workspace
             .cache_file()
@@ -494,7 +500,7 @@ fn list_reads_cached_latest_version_metadata() {
         concat!(
             "{\n",
             "  \"entries\": {\n",
-            "    \"npm:https://registry.npmjs.org:@qoder-ai/qodercli:latest\": {\n",
+            "    \"npm:http://127.0.0.1:9:@qoder-ai/qodercli:latest\": {\n",
             "      \"body\": \"{\\\"version\\\":\\\"9.9.9\\\"}\",\n",
             "      \"expiresAt\": 4102444800000,\n",
             "      \"fetchedAt\": 4102441200000\n",
@@ -517,6 +523,9 @@ fn list_reads_cached_latest_version_metadata() {
         .find(|agent| agent["name"] == "qoder")
         .expect("qoder should exist");
     assert_eq!(qoder["latestVersion"], "9.9.9");
+    assert_eq!(json["meta"]["source"], "cache");
+    assert_eq!(json["meta"]["fetchedAt"], "2099-12-31T23:00:00.000Z");
+    assert_eq!(json["meta"]["staleAfter"], "2100-01-01T00:00:00.000Z");
 }
 
 #[test]

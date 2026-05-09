@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use crate::cli::{Cli, ColorModeArg, LogLevelArg, OutputModeArg};
 use crate::errors::{AgxError, AgxErrorCode};
 
@@ -26,6 +28,29 @@ pub enum CacheMode {
     Refresh,
 }
 
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FreshnessSource {
+    Cache,
+    Network,
+}
+
+impl FreshnessSource {
+    pub const fn merge(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Network, Self::Network) => Self::Network,
+            _ => Self::Cache,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CliFreshness {
+    pub fetched_at: String,
+    pub source: FreshnessSource,
+    pub stale_after: String,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum ColorMode {
     Auto,
@@ -50,6 +75,7 @@ pub struct CliContext {
     pub cache_mode: CacheMode,
     pub color_mode: ColorMode,
     pub dry_run: bool,
+    pub freshness: Arc<Mutex<Option<CliFreshness>>>,
     pub idempotency_key: Option<String>,
     pub interactive: bool,
     pub log_level: LogLevel,
@@ -102,6 +128,7 @@ impl TryFrom<&Cli> for CliContext {
                 ColorModeArg::Never => ColorMode::Never,
             },
             dry_run: cli.dry_run,
+            freshness: Arc::new(Mutex::new(None)),
             idempotency_key: cli.idempotency_key.clone(),
             interactive: !cli.non_interactive,
             log_level: match cli.log_level.unwrap_or(LogLevelArg::Info) {
@@ -151,4 +178,22 @@ fn parse_duration_to_ms(input: &str) -> Result<u64, AgxError> {
             format!("Invalid timeout value: {input}"),
         )
     })
+}
+
+pub fn record_freshness(context: &CliContext, freshness: CliFreshness) {
+    let mut slot = context
+        .freshness
+        .lock()
+        .expect("freshness mutex should not be poisoned");
+    if let Some(existing) = slot.as_mut() {
+        if freshness.fetched_at < existing.fetched_at {
+            existing.fetched_at = freshness.fetched_at.clone();
+        }
+        existing.source = existing.source.merge(freshness.source);
+        if freshness.stale_after < existing.stale_after {
+            existing.stale_after = freshness.stale_after;
+        }
+    } else {
+        *slot = Some(freshness);
+    }
 }

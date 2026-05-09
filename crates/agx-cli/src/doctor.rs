@@ -602,6 +602,7 @@ fn default_doctor_context() -> CliContext {
         cache_mode: crate::context::CacheMode::Default,
         color_mode: crate::context::ColorMode::Never,
         dry_run: false,
+        freshness: std::sync::Arc::new(std::sync::Mutex::new(None)),
         idempotency_key: None,
         interactive: false,
         log_level: crate::context::LogLevel::Silent,

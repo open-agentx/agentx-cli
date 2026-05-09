@@ -173,6 +173,12 @@ fn schema_json_filters_to_a_specific_command() {
     assert!(properties.iter().any(|item| item["name"] == "agent"));
     assert!(properties.iter().any(|item| item["name"] == "capabilities"));
     assert!(properties.iter().any(|item| item["name"] == "inspection"));
+    let required = schemas[0]["dataSchema"]["required"]
+        .as_array()
+        .expect("inspect schema required should be an array");
+    assert!(required.iter().any(|item| item == "agent"));
+    assert!(required.iter().any(|item| item == "capabilities"));
+    assert!(required.iter().any(|item| item == "inspection"));
 }
 
 #[test]
@@ -387,6 +393,60 @@ fn schema_capabilities_and_commands_describe_nested_contracts() {
             .iter()
             .any(|item| item["name"] == "stability")
     );
+}
+
+#[test]
+fn schema_envelope_and_ndjson_meta_require_core_fields() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "schema", "commands"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let command = &json["data"]["commands"][0];
+    let envelope_required = command["envelopeSchema"]["required"]
+        .as_array()
+        .expect("envelope required should be an array");
+    assert!(envelope_required.iter().any(|item| item == "action"));
+    assert!(envelope_required.iter().any(|item| item == "error"));
+    assert!(envelope_required.iter().any(|item| item == "meta"));
+    assert!(envelope_required.iter().any(|item| item == "ok"));
+    assert!(envelope_required.iter().any(|item| item == "warnings"));
+
+    let meta = command["envelopeSchema"]["properties"]
+        .as_array()
+        .expect("envelope properties should be an array")
+        .iter()
+        .find(|item| item["name"] == "meta")
+        .expect("meta property should exist");
+    let meta_required = meta["schema"]["required"]
+        .as_array()
+        .expect("meta required should be an array");
+    assert!(meta_required.iter().any(|item| item == "mode"));
+    assert!(meta_required.iter().any(|item| item == "runId"));
+    assert!(meta_required.iter().any(|item| item == "schemaVersion"));
+    assert!(meta_required.iter().any(|item| item == "timestamp"));
+    assert!(meta_required.iter().any(|item| item == "version"));
+
+    let ndjson_required = command["ndjsonEventSchema"]["required"]
+        .as_array()
+        .expect("ndjson required should be an array");
+    assert!(ndjson_required.iter().any(|item| item == "action"));
+    assert!(ndjson_required.iter().any(|item| item == "meta"));
+    assert!(ndjson_required.iter().any(|item| item == "type"));
+}
+
+#[test]
+fn command_meta_timestamp_uses_iso_8601_shape() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "commands"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let timestamp = json["meta"]["timestamp"]
+        .as_str()
+        .expect("timestamp should exist");
+    assert!(timestamp.contains('T'));
+    assert!(timestamp.ends_with('Z'));
 }
 
 #[test]

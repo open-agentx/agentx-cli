@@ -65,9 +65,15 @@ pub struct CommandError {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandMeta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fetched_at: Option<String>,
     pub mode: &'static str,
     pub run_id: String,
     pub schema_version: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<crate::context::FreshnessSource>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stale_after: Option<String>,
     pub timestamp: String,
     pub version: &'static str,
 }
@@ -249,15 +255,27 @@ pub fn emit_ndjson_event(
         return Ok(());
     }
 
+    let freshness = context
+        .freshness
+        .lock()
+        .expect("freshness mutex should not be poisoned")
+        .clone();
     println!(
         "{}",
         serde_json::to_string(&NdjsonEvent {
             action: action.to_string(),
             data,
             meta: CommandMeta {
+                fetched_at: freshness
+                    .as_ref()
+                    .map(|freshness| freshness.fetched_at.clone()),
                 mode: "ndjson",
                 run_id: context.run_id.clone(),
                 schema_version: SCHEMA_VERSION,
+                source: freshness.as_ref().map(|freshness| freshness.source),
+                stale_after: freshness
+                    .as_ref()
+                    .map(|freshness| freshness.stale_after.clone()),
                 timestamp: current_timestamp(),
                 version: env!("CARGO_PKG_VERSION"),
             },
@@ -269,10 +287,22 @@ pub fn emit_ndjson_event(
 }
 
 fn create_meta(context: &CliContext) -> CommandMeta {
+    let freshness = context
+        .freshness
+        .lock()
+        .expect("freshness mutex should not be poisoned")
+        .clone();
     CommandMeta {
+        fetched_at: freshness
+            .as_ref()
+            .map(|freshness| freshness.fetched_at.clone()),
         mode: context.output_mode.as_str(),
         run_id: context.run_id.clone(),
         schema_version: SCHEMA_VERSION,
+        source: freshness.as_ref().map(|freshness| freshness.source),
+        stale_after: freshness
+            .as_ref()
+            .map(|freshness| freshness.stale_after.clone()),
         timestamp: current_timestamp(),
         version: env!("CARGO_PKG_VERSION"),
     }
@@ -292,12 +322,26 @@ fn create_ndjson_event<'a>(result: &'a CommandResult, context: &CliContext) -> i
     Event {
         action: &result.action,
         data: result,
-        meta: CommandMeta {
-            mode: "ndjson",
-            run_id: context.run_id.clone(),
-            schema_version: SCHEMA_VERSION,
-            timestamp: current_timestamp(),
-            version: env!("CARGO_PKG_VERSION"),
+        meta: {
+            let freshness = context
+                .freshness
+                .lock()
+                .expect("freshness mutex should not be poisoned")
+                .clone();
+            CommandMeta {
+                fetched_at: freshness
+                    .as_ref()
+                    .map(|freshness| freshness.fetched_at.clone()),
+                mode: "ndjson",
+                run_id: context.run_id.clone(),
+                schema_version: SCHEMA_VERSION,
+                source: freshness.as_ref().map(|freshness| freshness.source),
+                stale_after: freshness
+                    .as_ref()
+                    .map(|freshness| freshness.stale_after.clone()),
+                timestamp: current_timestamp(),
+                version: env!("CARGO_PKG_VERSION"),
+            }
         },
         kind: "result",
     }
@@ -334,12 +378,14 @@ fn render_human(result: &CommandResult) {
 }
 
 fn current_timestamp() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use time::OffsetDateTime;
+    use time::macros::format_description;
 
-    let seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs());
-    format!("{seconds}")
+    const ISO_8601_MILLIS: &[time::format_description::FormatItem<'static>] =
+        format_description!("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z");
+    OffsetDateTime::now_utc()
+        .format(ISO_8601_MILLIS)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00.000Z".to_string())
 }
 
 fn render_default_human(action: &str, data: &Value) {

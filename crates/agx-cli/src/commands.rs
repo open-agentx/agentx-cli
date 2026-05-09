@@ -457,6 +457,7 @@ fn commands_command(context: &CliContext) -> CommandResult {
 }
 
 fn capabilities_command(context: &CliContext) -> CommandResult {
+    let self_inspection = self_upgrade::inspect_self_with_context(None, context);
     CommandResult::success(
         "capabilities",
         CapabilitiesData {
@@ -473,7 +474,7 @@ fn capabilities_command(context: &CliContext) -> CommandResult {
                 idempotency_key: true,
                 log_levels: vec!["silent", "error", "warn", "info", "debug"],
                 quiet_logs: true,
-                self_upgrade: true,
+                self_upgrade: self_inspection.can_auto_update,
                 timeout: true,
             },
             installers: InstallerCapabilities {
@@ -2610,6 +2611,7 @@ fn agent_capabilities(agent: AgentDefinition) -> AgentCapabilities {
             cache_mode: crate::context::CacheMode::Default,
             color_mode: crate::context::ColorMode::Never,
             dry_run: false,
+            freshness: std::sync::Arc::new(std::sync::Mutex::new(None)),
             idempotency_key: None,
             interactive: false,
             log_level: crate::context::LogLevel::Silent,
@@ -2834,6 +2836,7 @@ fn dry_run_warning() -> CommandWarning {
 }
 
 fn object_schema(properties: Vec<(&'static str, JsonSchema)>) -> JsonSchema {
+    let required = properties.iter().map(|(name, _)| *name).collect();
     JsonSchema {
         additional_properties: Some(false),
         items: None,
@@ -2843,7 +2846,7 @@ fn object_schema(properties: Vec<(&'static str, JsonSchema)>) -> JsonSchema {
                 .map(|(name, schema)| SchemaProperty { name, schema })
                 .collect(),
         ),
-        required: None,
+        required: Some(required),
         schema_type: "object",
     }
 }

@@ -65,6 +65,20 @@ AGX SHALL publish stable command-catalog and schema-catalog metadata for automat
 - THEN AGX returns the requested command schema only
 - AND the schema includes nested fields needed to automate capabilities, config, doctor, exec, info, inspect, install batch results, resolve, upgrade, and update results
 
+#### Scenario: Structured schemas expose strict required fields
+
+- WHEN the user runs `agx schema --json`
+- THEN envelope schemas and nested data schemas set `additionalProperties: false`
+- AND object schemas mark their required fields explicitly
+- AND the command metadata schema keeps `source`, `fetchedAt`, and `staleAfter` as optional freshness fields
+
+#### Scenario: Structured result metadata uses stable ISO-8601 timestamps
+
+- WHEN AGX emits a JSON or NDJSON result envelope
+- THEN `meta.timestamp` uses an ISO-8601 UTC timestamp
+- AND commands that consult cached version metadata may include `meta.source`, `meta.fetchedAt`, and `meta.staleAfter`
+- AND cached fallback metadata reports cache freshness instead of pretending a new network refresh happened
+
 #### Scenario: Human consumer inspects command and schema catalogs
 
 - WHEN the user runs `agx commands` or `agx schema`
