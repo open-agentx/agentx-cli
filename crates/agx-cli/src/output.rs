@@ -463,16 +463,13 @@ fn render_config(data: &Value) {
     let action = data["action"].as_str().unwrap_or("list");
     match action {
         "list" | "reset" => {
-            println!("Configuration\n");
-            if let Some(config) = data["config"].as_object() {
-                for (key, value) in config {
-                    if !value.is_null() {
-                        let value_text = value
-                            .as_str()
-                            .map_or_else(|| value.to_string(), ToString::to_string);
-                        println!("  {key}: {value_text}");
-                    }
-                }
+            if action == "list" {
+                println!("Current Configuration:\n");
+            }
+            if let Some(config) = data["config"].as_object()
+                && let Ok(pretty) = serde_json::to_string_pretty(config)
+            {
+                println!("{pretty}");
             }
             if action == "reset" {
                 println!("\nConfiguration reset to defaults.");
@@ -483,7 +480,8 @@ fn render_config(data: &Value) {
             if let Some(key) = data["key"].as_str() {
                 let value = &data["value"];
                 if value.is_null() {
-                    println!("{key} is not set");
+                    let _ = key;
+                    println!("(not set)");
                 } else if let Some(string) = value.as_str() {
                     println!("{string}");
                 } else {
@@ -1116,6 +1114,16 @@ fn render_install(result: &CommandResult) {
         return;
     }
 
+    if let Some(warning) = result.warnings.iter().find(|warning| {
+        matches!(
+            warning.code.as_str(),
+            "ALREADY_INSTALLED" | "TRACKED_EXISTING_INSTALL" | "UNTRACKED_EXISTING_INSTALL"
+        )
+    }) {
+        println!("{}", warning.message);
+        return;
+    }
+
     if let Some(message) = data["message"].as_str() {
         println!("{message}");
         return;
@@ -1142,6 +1150,16 @@ fn render_ensure(result: &CommandResult) {
         .any(|warning| warning.code == "DRY_RUN")
     {
         println!("Dry run: would ensure {display_name}.");
+        return;
+    }
+
+    if let Some(warning) = result.warnings.iter().find(|warning| {
+        matches!(
+            warning.code.as_str(),
+            "ALREADY_INSTALLED" | "TRACKED_EXISTING_INSTALL" | "UNTRACKED_EXISTING_INSTALL"
+        )
+    }) {
+        println!("{}", warning.message);
         return;
     }
 

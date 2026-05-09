@@ -59,6 +59,28 @@ fn config_get_returns_null_for_missing_key() {
 }
 
 #[test]
+fn config_get_human_output_prints_not_set_for_missing_key() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["config", "get", "nonexistent"]);
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert_eq!(stdout.trim(), "(not set)");
+}
+
+#[test]
+fn config_list_human_output_prints_pretty_json() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["config"]);
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Current Configuration:"));
+    assert!(stdout.contains("\"defaultPackageManager\": \"bun\""));
+    assert!(stdout.contains("\"networkRetries\": 2"));
+}
+
+#[test]
 fn config_set_normalizes_registry_url() {
     let workspace = TestWorkspace::new();
     let output = run_agx(

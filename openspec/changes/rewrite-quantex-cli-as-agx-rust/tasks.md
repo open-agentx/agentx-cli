@@ -52,6 +52,7 @@
 - [x] 4.3.10 Close P1 latest shortcut structured-output parity gap from `cursor_quantex_cli_command_coverage_dif.md`, allowing `agx <agent>` to emit the same JSON/NDJSON execution envelopes as `agx exec`.
 - [x] 4.3.11 Close latest `resolve` parity gaps from `cursor_quantex_cli_command_coverage_dif.md`, including `detected-in-path` install-source reporting, simplified missing-install messaging, and installed-agent human output details.
 - [x] 4.3.12 Close latest `upgrade` parity gaps from `cursor_quantex_cli_command_coverage_dif.md`, including `updated` status reporting, `canAutoUpdate` structured data, and current/latest version human output messaging.
+- [x] 4.3.13 Close latest lifecycle/config warning-contract parity gaps from `cursor_quantex_cli_command_coverage_dif.md`, including install/ensure warning codes, config available-actions warnings, `(not set)` output, and pretty JSON config rendering.
 - [x] 4.4 Add AGX agent workflow bootstrap, OpenSpec README/config, and project-memory spec.
 - [x] 4.5 Add task-start and worktree runbooks.
 - [x] 4.6 Add Rust workspace architecture ADR.

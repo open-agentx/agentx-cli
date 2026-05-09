@@ -167,6 +167,12 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - THEN AGX renders a human-readable progress message for the lifecycle action
 - AND renders a human-readable completion message when the action succeeds
 
+#### Scenario: Lifecycle install outcomes expose warning codes
+
+- WHEN the user runs `agx install <agent>` or `agx ensure <agent>`
+- THEN AGX reports already-installed, tracked-existing-install, untracked-existing-install, and dry-run outcomes through structured warning codes
+- AND batch lifecycle summaries derive per-agent status from those warning codes instead of parsing human message text
+
 ### Requirement: Lifecycle commands MUST support dry-run behavior
 
 AGX SHALL support dry-run planning for lifecycle and execution commands that can mutate state or invoke external installers.

@@ -66,6 +66,11 @@ fn config_rejects_unknown_actions() {
             .expect("message should exist")
             .contains("Unknown action")
     );
+    assert_eq!(json["warnings"][0]["code"], "AVAILABLE_ACTIONS");
+    assert_eq!(
+        json["warnings"][0]["message"],
+        "Available actions: get, set, reset"
+    );
 }
 
 #[test]

@@ -6,6 +6,7 @@ use crate::config;
 use crate::context::CliContext;
 use crate::errors::{AgxError, AgxErrorCode};
 use crate::inspection;
+use crate::output::CommandWarning;
 use crate::state::{self, InstalledAgentState};
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -17,6 +18,8 @@ pub struct LifecycleResult {
     pub installed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<CommandWarning>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -74,6 +77,28 @@ pub fn install_agent(
             install_state: inferred_state,
             installed: true,
             message: Some(message),
+            warnings: vec![if install_state.is_some() {
+                CommandWarning {
+                    code: "ALREADY_INSTALLED".to_string(),
+                    message: format!("{} is already installed.", agent.display_name),
+                }
+            } else if adopted {
+                CommandWarning {
+                    code: "TRACKED_EXISTING_INSTALL".to_string(),
+                    message: format!(
+                        "AGX is now tracking the existing install of {}.",
+                        agent.display_name
+                    ),
+                }
+            } else {
+                CommandWarning {
+                    code: "UNTRACKED_EXISTING_INSTALL".to_string(),
+                    message: format!(
+                        "{} is already installed, but this install is not tracked by AGX.",
+                        agent.display_name
+                    ),
+                }
+            }],
         });
     }
 
@@ -96,6 +121,7 @@ pub fn install_agent(
             install_state: Some(installed_state(agent, install_type, package)),
             installed: false,
             message: Some(format!("Dry run: would run `{}`.", command.join(" "))),
+            warnings: Vec::new(),
         });
     }
 
@@ -107,6 +133,7 @@ pub fn install_agent(
         install_state: Some(installed_state),
         installed: true,
         message: None,
+        warnings: Vec::new(),
     })
 }
 
@@ -145,6 +172,28 @@ pub fn ensure_agent(
             install_state: inferred_state,
             installed: true,
             message: Some(message),
+            warnings: vec![if install_state.is_some() {
+                CommandWarning {
+                    code: "ALREADY_INSTALLED".to_string(),
+                    message: format!("{} is already installed.", agent.display_name),
+                }
+            } else if adopted {
+                CommandWarning {
+                    code: "TRACKED_EXISTING_INSTALL".to_string(),
+                    message: format!(
+                        "AGX is now tracking the existing install of {}.",
+                        agent.display_name
+                    ),
+                }
+            } else {
+                CommandWarning {
+                    code: "UNTRACKED_EXISTING_INSTALL".to_string(),
+                    message: format!(
+                        "{} is already installed, but this install is not tracked by AGX.",
+                        agent.display_name
+                    ),
+                }
+            }],
         });
     }
 
@@ -180,6 +229,7 @@ pub fn uninstall_agent(
             install_state: Some(installed_state),
             installed: true,
             message: Some(format!("Dry run: would run `{}`.", command.join(" "))),
+            warnings: Vec::new(),
         });
     }
 
@@ -190,6 +240,7 @@ pub fn uninstall_agent(
         install_state: None,
         installed: false,
         message: None,
+        warnings: Vec::new(),
     })
 }
 

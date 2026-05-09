@@ -59,10 +59,11 @@ fn install_reports_already_installed_when_binary_exists() {
     assert_eq!(json["action"], "install");
     assert_eq!(json["data"]["installed"], true);
     assert_eq!(json["data"]["changed"], false);
+    assert_eq!(json["warnings"][0]["code"], "ALREADY_INSTALLED");
     assert!(
-        json["data"]["message"]
+        json["warnings"][0]["message"]
             .as_str()
-            .expect("message should exist")
+            .expect("warning should exist")
             .contains("already installed")
     );
 }
@@ -99,10 +100,11 @@ fn install_explains_when_existing_binary_is_not_tracked() {
     let json = stdout_json(&output);
     assert_eq!(json["data"]["installed"], true);
     assert_eq!(json["data"]["changed"], false);
+    assert_eq!(json["warnings"][0]["code"], "UNTRACKED_EXISTING_INSTALL");
     assert!(
-        json["data"]["message"]
+        json["warnings"][0]["message"]
             .as_str()
-            .expect("message should exist")
+            .expect("warning should exist")
             .contains("not tracked by AGX")
     );
 }
@@ -123,10 +125,11 @@ fn install_tracks_existing_bun_install_when_source_is_unambiguous() {
         json["data"]["installState"]["packageName"],
         "@qoder-ai/qodercli"
     );
+    assert_eq!(json["warnings"][0]["code"], "TRACKED_EXISTING_INSTALL");
     assert!(
-        json["data"]["message"]
+        json["warnings"][0]["message"]
             .as_str()
-            .expect("message should exist")
+            .expect("warning should exist")
             .contains("now tracking the existing install")
     );
 }
@@ -144,10 +147,11 @@ fn install_tracks_existing_script_install_when_agent_supports_self_update() {
     assert_eq!(json["data"]["changed"], true);
     assert_eq!(json["data"]["installState"]["installType"], "script");
     assert_eq!(json["data"]["installState"]["command"], "agent update");
+    assert_eq!(json["warnings"][0]["code"], "TRACKED_EXISTING_INSTALL");
     assert!(
-        json["data"]["message"]
+        json["warnings"][0]["message"]
             .as_str()
-            .expect("message should exist")
+            .expect("warning should exist")
             .contains("now tracking the existing install")
     );
 }
@@ -339,10 +343,11 @@ fn ensure_reports_already_installed_when_binary_exists() {
     assert_eq!(json["action"], "ensure");
     assert_eq!(json["data"]["installed"], true);
     assert_eq!(json["data"]["changed"], false);
+    assert_eq!(json["warnings"][0]["code"], "ALREADY_INSTALLED");
     assert!(
-        json["data"]["message"]
+        json["warnings"][0]["message"]
             .as_str()
-            .expect("message should exist")
+            .expect("warning should exist")
             .contains("already installed")
     );
 }
@@ -395,10 +400,11 @@ fn ensure_explains_when_existing_binary_is_not_tracked() {
     let json = stdout_json(&output);
     assert_eq!(json["data"]["installed"], true);
     assert_eq!(json["data"]["changed"], false);
+    assert_eq!(json["warnings"][0]["code"], "UNTRACKED_EXISTING_INSTALL");
     assert!(
-        json["data"]["message"]
+        json["warnings"][0]["message"]
             .as_str()
-            .expect("message should exist")
+            .expect("warning should exist")
             .contains("not tracked by AGX")
     );
 }
@@ -419,10 +425,11 @@ fn ensure_tracks_existing_npm_install_when_source_is_unambiguous() {
         json["data"]["installState"]["packageName"],
         "@qoder-ai/qodercli"
     );
+    assert_eq!(json["warnings"][0]["code"], "TRACKED_EXISTING_INSTALL");
     assert!(
-        json["data"]["message"]
+        json["warnings"][0]["message"]
             .as_str()
-            .expect("message should exist")
+            .expect("warning should exist")
             .contains("now tracking the existing install")
     );
 }
@@ -440,10 +447,11 @@ fn ensure_tracks_existing_script_install_when_agent_supports_self_update() {
     assert_eq!(json["data"]["changed"], true);
     assert_eq!(json["data"]["installState"]["installType"], "script");
     assert_eq!(json["data"]["installState"]["command"], "agent update");
+    assert_eq!(json["warnings"][0]["code"], "TRACKED_EXISTING_INSTALL");
     assert!(
-        json["data"]["message"]
+        json["warnings"][0]["message"]
             .as_str()
-            .expect("message should exist")
+            .expect("warning should exist")
             .contains("now tracking the existing install")
     );
 }

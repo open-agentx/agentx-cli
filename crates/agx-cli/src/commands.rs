@@ -213,6 +213,8 @@ struct LifecycleData {
     installed: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    warnings: Vec<CommandWarning>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1544,10 +1546,12 @@ fn lifecycle_command_with_started(
                     install_state: result.install_state,
                     installed: result.installed,
                     message: result.message,
+                    warnings: result.warnings.clone(),
                 },
                 CommandTarget::agent(agent.name),
                 context,
             );
+            command_result.warnings.extend(result.warnings);
             if context.dry_run {
                 command_result.warnings.push(dry_run_warning());
             }
@@ -1635,19 +1639,25 @@ fn lifecycle_batch_status(result: &CommandResult) -> &'static str {
         return "planned";
     }
 
-    let message = result
-        .data
-        .as_ref()
-        .and_then(|data| data.get("message"))
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default();
-    if message.contains("now tracking the existing install") {
+    if result
+        .warnings
+        .iter()
+        .any(|warning| warning.code == "TRACKED_EXISTING_INSTALL")
+    {
         return "tracked-existing-install";
     }
-    if message.contains("already installed, but this install is not tracked") {
+    if result
+        .warnings
+        .iter()
+        .any(|warning| warning.code == "UNTRACKED_EXISTING_INSTALL")
+    {
         return "untracked-existing-install";
     }
-    if message.contains("already installed.") {
+    if result
+        .warnings
+        .iter()
+        .any(|warning| warning.code == "ALREADY_INSTALLED")
+    {
         return "already-installed";
     }
 
@@ -2757,12 +2767,20 @@ fn invalid_config_argument(
     key: Option<String>,
     context: &CliContext,
 ) -> CommandResult {
-    CommandResult::error(
+    let message = message.into();
+    let mut result = CommandResult::error(
         "config",
-        AgxError::new(AgxErrorCode::InvalidArgument, message),
+        AgxError::new(AgxErrorCode::InvalidArgument, message.clone()),
         CommandTarget::config(key),
         context,
-    )
+    );
+    if message.starts_with("Unknown action: ") {
+        result.warnings.push(CommandWarning {
+            code: "AVAILABLE_ACTIONS".to_string(),
+            message: "Available actions: get, set, reset".to_string(),
+        });
+    }
+    result
 }
 
 fn exec_missing_result(
