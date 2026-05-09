@@ -44,6 +44,12 @@ AGX SHALL support updating all tracked managed agents.
 - THEN AGX groups or orders update work by recorded install source
 - AND returns one structured result per tracked agent
 
+#### Scenario: Human update output reports transition and recovery hints
+
+- WHEN the user runs `agx update <agent>` and AGX performs or attempts an update
+- THEN successful human output reports the strategy and version transition before the success message
+- AND failed human output reports the attempted update transition before surfacing the recovery hint
+
 #### Scenario: Managed install version metadata is more precise than binary probing
 
 - GIVEN AGX is tracking a managed npm or Bun install for an agent

@@ -981,6 +981,26 @@ fn update_all_human_output_includes_summary_counts() {
 }
 
 #[test]
+fn update_single_human_output_reports_successful_managed_update_with_version_transition() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["update", "qoder"],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "0.2.0"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Updating Qoder CLI via managed/bun... (0.1.0 -> 0.2.0)"));
+    assert!(stdout.contains("Qoder CLI updated successfully!"));
+}
+
+#[test]
 fn update_all_batches_bun_managed_updates_into_one_command() {
     let workspace = TestWorkspace::new();
     let capture_path = workspace.root().join("commands.log");
@@ -1401,6 +1421,37 @@ fn update_single_self_update_failure_returns_hint() {
             .expect("hint should exist")
             .contains("Try running qodercli update directly")
     );
+}
+
+#[test]
+fn update_single_human_output_reports_failure_with_next_step() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "script",
+      "command": "qodercli update"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["update", "qoder"],
+        &[("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "0.2.0")],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Updating Qoder CLI via self-update... (0.1.0 -> 0.2.0)"));
+    assert!(stdout.contains("Failed to update Qoder CLI."));
+    assert!(stdout.contains("Next step: Try running qodercli update directly."));
 }
 
 #[test]

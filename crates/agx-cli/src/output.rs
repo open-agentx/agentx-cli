@@ -1179,7 +1179,7 @@ fn render_update(result: &CommandResult) {
                         _ => String::new(),
                     };
                     println!("Updating {name} via {strategy}...{version_text}");
-                    println!("{name} updated successfully");
+                    println!("{name} updated successfully!");
                 }
                 "planned" => println!(
                     "Dry run: would update {name}. {}",
@@ -1194,16 +1194,27 @@ fn render_update(result: &CommandResult) {
                         println!("Next step: {hint}");
                     }
                 }
-                "failed" | "locked" => {
-                    if let Some(message) = result["message"].as_str() {
-                        println!("{message}");
-                    } else {
-                        println!("Failed to update {name}.");
-                    }
+                "failed" => {
+                    let strategy = result["strategy"].as_str().unwrap_or("update");
+                    let version_text = match (
+                        result["installedVersion"].as_str(),
+                        result["latestVersion"].as_str(),
+                    ) {
+                        (Some(installed), Some(latest)) => format!(" ({installed} -> {latest})"),
+                        _ => String::new(),
+                    };
+                    println!("Updating {name} via {strategy}...{version_text}");
+                    println!("Failed to update {name}.");
                     if let Some(hint) = result["hint"].as_str() {
                         println!("Next step: {hint}");
                     }
                 }
+                "locked" => println!(
+                    "{}",
+                    result["message"]
+                        .as_str()
+                        .unwrap_or("Another AGX process is already updating the requested agent.")
+                ),
                 _ => println!("{result}"),
             }
         }
