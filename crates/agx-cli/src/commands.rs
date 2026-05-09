@@ -1774,8 +1774,6 @@ fn command_catalog() -> Vec<CommandDescriptor> {
         },
         CommandDescriptor {
             flags: vec![
-                "--channel",
-                "--check",
                 "--json",
                 "--output",
                 "--yes",
@@ -1794,15 +1792,13 @@ fn command_catalog() -> Vec<CommandDescriptor> {
         CommandDescriptor {
             flags: vec![
                 "--install",
-                "--install-policy",
-                "--json",
+                "--non-interactive",
                 "--output",
                 "--yes",
                 "--quiet",
                 "--color",
                 "--log-level",
                 "--dry-run",
-                "--timeout",
             ],
             name: "exec",
             output_schema_ref: "#/commands/exec",
@@ -1843,8 +1839,6 @@ fn command_catalog() -> Vec<CommandDescriptor> {
         },
         CommandDescriptor {
             flags: vec![
-                "--channel",
-                "--check",
                 "--json",
                 "--output",
                 "--yes",
@@ -1924,16 +1918,18 @@ fn command_catalog() -> Vec<CommandDescriptor> {
         },
         CommandDescriptor {
             flags: vec![
-                "--channel",
                 "--check",
+                "--channel",
                 "--json",
                 "--output",
-                "--yes",
                 "--quiet",
                 "--color",
                 "--log-level",
                 "--dry-run",
+                "--refresh",
+                "--no-cache",
                 "--timeout",
+                "--idempotency-key",
             ],
             name: "upgrade",
             output_schema_ref: "#/commands/upgrade",

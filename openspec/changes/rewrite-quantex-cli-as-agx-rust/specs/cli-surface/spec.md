@@ -59,6 +59,13 @@ AGX SHALL publish stable command-catalog and schema-catalog metadata for automat
 - WHEN the user runs `agx commands --json`
 - THEN each command entry includes its name, summary, supported flags, stability, and output schema reference
 
+#### Scenario: Command catalog flags match the stable lifecycle surface
+
+- WHEN the user runs `agx commands --json`
+- THEN `exec` advertises `--install` and `--non-interactive` without the alias-style `--install-policy`
+- AND `install` and `ensure` do not advertise self-upgrade-only flags such as `--channel` or `--check`
+- AND `upgrade` advertises `--check`, `--channel`, `--refresh`, `--no-cache`, and `--idempotency-key`
+
 #### Scenario: Machine consumer inspects a specific structured schema
 
 - WHEN the user runs `agx schema <command> --json`

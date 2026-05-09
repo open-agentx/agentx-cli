@@ -38,7 +38,7 @@ fn commands_human_output_shows_flags_and_schema_refs() {
 }
 
 #[test]
-fn commands_json_describes_install_and_inspect_flags() {
+fn commands_json_describes_install_exec_and_inspect_flags() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "commands"]);
 
@@ -52,6 +52,10 @@ fn commands_json_describes_install_and_inspect_flags() {
         .iter()
         .find(|command| command["name"] == "install")
         .expect("install command should exist");
+    let exec = commands
+        .iter()
+        .find(|command| command["name"] == "exec")
+        .expect("exec command should exist");
     let inspect = commands
         .iter()
         .find(|command| command["name"] == "inspect")
@@ -69,10 +73,23 @@ fn commands_json_describes_install_and_inspect_flags() {
         .iter()
         .filter_map(|flag| flag.as_str())
         .collect();
+    let exec_flags: Vec<_> = exec["flags"]
+        .as_array()
+        .expect("exec flags should be an array")
+        .iter()
+        .filter_map(|flag| flag.as_str())
+        .collect();
 
     assert!(install_flags.contains(&"--yes"));
     assert!(install_flags.contains(&"--dry-run"));
+    assert!(!install_flags.contains(&"--channel"));
+    assert!(!install_flags.contains(&"--check"));
     assert_eq!(install["summary"], "Install one or more agents");
+    assert!(exec_flags.contains(&"--install"));
+    assert!(exec_flags.contains(&"--non-interactive"));
+    assert!(!exec_flags.contains(&"--install-policy"));
+    assert!(!exec_flags.contains(&"--json"));
+    assert!(!exec_flags.contains(&"--timeout"));
     assert!(inspect_flags.contains(&"--refresh"));
     assert!(inspect_flags.contains(&"--no-cache"));
 }
@@ -117,6 +134,34 @@ fn commands_json_includes_schema_refs_and_stability() {
             .expect("upgrade flags should be an array")
             .iter()
             .any(|flag| flag == "--check")
+    );
+    assert!(
+        upgrade["flags"]
+            .as_array()
+            .expect("upgrade flags should be an array")
+            .iter()
+            .any(|flag| flag == "--refresh")
+    );
+    assert!(
+        upgrade["flags"]
+            .as_array()
+            .expect("upgrade flags should be an array")
+            .iter()
+            .any(|flag| flag == "--no-cache")
+    );
+    assert!(
+        upgrade["flags"]
+            .as_array()
+            .expect("upgrade flags should be an array")
+            .iter()
+            .any(|flag| flag == "--idempotency-key")
+    );
+    assert!(
+        !upgrade["flags"]
+            .as_array()
+            .expect("upgrade flags should be an array")
+            .iter()
+            .any(|flag| flag == "--yes")
     );
 }
 
