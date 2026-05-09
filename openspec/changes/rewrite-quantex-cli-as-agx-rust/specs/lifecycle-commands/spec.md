@@ -125,6 +125,14 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - AND includes installed version and launch path data when available
 - AND provides install guidance when the agent is missing
 
+#### Scenario: Resolve reports untracked PATH installs distinctly
+
+- GIVEN an agent binary is visible in PATH
+- AND AGX has no recorded install state for that agent
+- WHEN the user runs `agx resolve <agent>`
+- THEN AGX reports the install source as `detected-in-path`
+- AND renders the agent name, binary name, lifecycle, source, version, and launch path in human output
+
 #### Scenario: Inspect output reports latest version details for installed agents
 
 - WHEN the user runs `agx inspect <agent>`

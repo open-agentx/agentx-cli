@@ -314,6 +314,27 @@ fn resolve_returns_binary_path_for_installed_agent() {
 }
 
 #[test]
+fn resolve_uses_detected_in_path_for_untracked_installed_agent() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx(&workspace, &["--json", "resolve", "qoder"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["resolution"]["installed"], true);
+    assert_eq!(
+        json["data"]["resolution"]["installSource"],
+        "detected-in-path"
+    );
+    assert_eq!(json["data"]["resolution"]["lifecycle"], "unmanaged");
+    assert_eq!(
+        json["data"]["resolution"]["sourceLabel"],
+        "detected in PATH"
+    );
+}
+
+#[test]
 fn resolve_human_output_prints_ensure_guidance_for_missing_agent_binary() {
     let workspace = TestWorkspace::new();
 
@@ -351,9 +372,13 @@ fn resolve_human_output_prints_binary_details_for_installed_agent() {
     assert!(output.status.success());
     let stdout = stdout_text(&output);
     assert!(stdout.contains("Qoder CLI"));
+    assert!(stdout.contains("Name:          qoder"));
+    assert!(stdout.contains("Binary:        qodercli"));
     assert!(stdout.contains("Path:"));
+    assert!(stdout.contains("Source:        managed via bun (@qoder-ai/qodercli)"));
+    assert!(stdout.contains("Lifecycle:     managed"));
     assert!(stdout.contains("Install Type:  bun"));
-    assert!(stdout.contains("Version:      0.1.0"));
+    assert!(stdout.contains("Version:       0.1.0"));
     assert!(stdout.contains("Launch:"));
 }
 

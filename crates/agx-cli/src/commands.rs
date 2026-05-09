@@ -1454,10 +1454,7 @@ fn resolve_command(agent_name: &str, context: &CliContext) -> CommandResult {
             data,
             AgxError::new(
                 AgxErrorCode::AgentNotInstalled,
-                format!(
-                    "{} is not installed. Run `agx ensure {}` first.",
-                    agent.display_name, agent.name
-                ),
+                format!("{} is not installed.", agent.display_name),
             ),
             CommandTarget::agent(agent.name),
             context,
@@ -2662,8 +2659,9 @@ fn lifecycle_for(installed_state: Option<&crate::state::InstalledAgentState>) ->
 }
 
 fn install_source_for(agent: AgentDefinition) -> &'static str {
-    crate::state::get_installed_agent_state(agent.name)
-        .map_or("path", |state| install_source_kind(&state.install_type))
+    crate::state::get_installed_agent_state(agent.name).map_or("detected-in-path", |state| {
+        install_source_kind(&state.install_type)
+    })
 }
 
 fn install_source_kind(install_type: &str) -> &'static str {

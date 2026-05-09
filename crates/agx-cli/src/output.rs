@@ -906,17 +906,28 @@ fn render_resolve(result: &CommandResult) {
         "{}\n",
         data["agent"]["displayName"].as_str().unwrap_or("Agent")
     );
+    println!(
+        "  Name:          {}",
+        data["agent"]["name"].as_str().unwrap_or("-")
+    );
+    println!(
+        "  Binary:        {}",
+        data["agent"]["binaryName"].as_str().unwrap_or("-")
+    );
     if let Some(path) = data["resolution"]["binaryPath"].as_str() {
         println!("  Path:          {path}");
-    }
-    if let Some(install_type) = data["resolution"]["installSource"].as_str() {
-        println!("  Install Type:  {install_type}");
     }
     if let Some(source) = data["resolution"]["sourceLabel"].as_str() {
         println!("  Source:        {source}");
     }
+    if let Some(lifecycle) = data["resolution"]["lifecycle"].as_str() {
+        println!("  Lifecycle:     {lifecycle}");
+    }
+    if let Some(install_type) = data["resolution"]["installSource"].as_str() {
+        println!("  Install Type:  {install_type}");
+    }
     if let Some(version) = data["resolution"]["installedVersion"].as_str() {
-        println!("  Version:      {version}");
+        println!("  Version:       {version}");
     }
     if let Some(launch) = data["resolution"]["suggestedLaunchCommand"].as_array() {
         let launch = launch
