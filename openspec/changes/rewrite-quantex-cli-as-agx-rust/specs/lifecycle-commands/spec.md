@@ -105,6 +105,13 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - AND includes installed version and launch path data when available
 - AND provides install guidance when the agent is missing
 
+#### Scenario: Doctor reports manual update guidance for unmanaged PATH agents
+
+- GIVEN an agent is visible in PATH but not tracked as a managed install
+- WHEN the user runs `agx doctor`
+- THEN AGX reports an agent remediation issue
+- AND includes manual update guidance even when the agent has no self-update command
+
 ### Requirement: Lifecycle commands MUST support dry-run behavior
 
 AGX SHALL support dry-run planning for lifecycle and execution commands that can mutate state or invoke external installers.

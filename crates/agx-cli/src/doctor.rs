@@ -523,28 +523,46 @@ fn doctor_issues(
                 ],
             });
 
-            if !agents::self_update_commands(agent_definition).is_empty() {
-                issues.push(DoctorIssue {
-                    blocking: false,
-                    category: "agent",
-                    code: "AGENT_MANUAL_UPDATE_REQUIRED",
-                    docs_ref: Some("docs/runbooks/quantex-troubleshooting.md"),
-                    message: format!(
-                        "{} can update itself, but AGX cannot verify or manage that untracked install automatically.",
-                        agent.display_name
-                    ),
-                    severity: "warning",
-                    subject: IssueSubject {
-                        kind: "agent",
-                        name: Some(agent_definition.name.to_string()),
-                    },
-                    suggested_action: "run-agent-self-update",
-                    suggested_commands: agents::self_update_commands(agent_definition)
-                        .into_iter()
-                        .map(ToString::to_string)
-                        .collect(),
-                });
-            }
+            let self_update_commands = agents::self_update_commands(agent_definition);
+            let suggested_action = if self_update_commands.is_empty() {
+                "follow-manual-agent-update"
+            } else {
+                "run-agent-self-update"
+            };
+            let suggested_commands = if self_update_commands.is_empty() {
+                Vec::new()
+            } else {
+                self_update_commands
+                    .into_iter()
+                    .map(ToString::to_string)
+                    .collect()
+            };
+            let message = if suggested_commands.is_empty() {
+                format!(
+                    "{} is available in PATH but not tracked as a managed AGX install. Reinstall through AGX if you want managed lifecycle operations.",
+                    agent.display_name
+                )
+            } else {
+                format!(
+                    "{} can update itself, but AGX cannot verify or manage that untracked install automatically.",
+                    agent.display_name
+                )
+            };
+
+            issues.push(DoctorIssue {
+                blocking: false,
+                category: "agent",
+                code: "AGENT_MANUAL_UPDATE_REQUIRED",
+                docs_ref: Some("docs/runbooks/quantex-troubleshooting.md"),
+                message,
+                severity: "warning",
+                subject: IssueSubject {
+                    kind: "agent",
+                    name: Some(agent_definition.name.to_string()),
+                },
+                suggested_action,
+                suggested_commands,
+            });
         }
     }
 
