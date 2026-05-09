@@ -35,6 +35,40 @@ fn explicit_exec_returns_structured_process_result() {
 }
 
 #[test]
+fn explicit_exec_unknown_agent_returns_agent_not_found() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx(
+        &workspace,
+        &[
+            "--json",
+            "exec",
+            "unknown",
+            "--install",
+            "never",
+            "--",
+            "--version",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(3));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "AGENT_NOT_FOUND");
+    assert_eq!(json["error"]["message"], "Unknown agent: unknown");
+}
+
+#[test]
+fn shortcut_exec_unknown_agent_returns_agent_not_found() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx(&workspace, &["unknown", "--", "--version"]);
+
+    assert_eq!(output.status.code(), Some(3));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("Unknown agent: unknown"));
+}
+
+#[test]
 fn shortcut_exec_uses_same_execution_path() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
@@ -154,6 +188,10 @@ fn exec_without_install_policy_returns_manual_action_required_when_missing() {
         json["data"]["execution"]["installGuidance"]["suggestedExecCommand"],
         "agx exec jcode --install if-missing -- --version"
     );
+    assert_eq!(
+        json["data"]["execution"]["installGuidance"]["suggestedAction"],
+        "rerun-with-install-policy"
+    );
 }
 
 #[test]
@@ -210,6 +248,54 @@ fn shortcut_exec_non_interactive_returns_interaction_required_when_install_is_ne
 }
 
 #[test]
+fn explicit_exec_if_missing_non_interactive_installs_and_runs() {
+    let workspace = TestWorkspace::new();
+    let bin_dir = workspace.bin_dir().to_string_lossy().into_owned();
+
+    let output = run_agx_with_env(
+        &workspace,
+        &[
+            "--json",
+            "--non-interactive",
+            "exec",
+            "qoder",
+            "--install",
+            "if-missing",
+            "--",
+            "--version",
+        ],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_CREATE_BINARY_NAME", "qodercli"),
+            ("AGX_TEST_CREATE_BINARY_DIR", &bin_dir),
+        ],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["action"], "exec");
+    assert_eq!(json["data"]["execution"]["installPolicy"], "if-missing");
+    assert_eq!(json["data"]["execution"]["installedBefore"], false);
+    assert_eq!(json["data"]["execution"]["installedAfter"], true);
+    assert_eq!(json["data"]["execution"]["exitCode"], 0);
+}
+
+#[test]
+fn explicit_exec_human_mode_returns_agent_process_exit_code() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx(
+        &workspace,
+        &["exec", "qoder", "--install", "never", "--", "--version"],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("agx 0.1.0"));
+}
+
+#[test]
 fn shortcut_exec_installs_after_interactive_confirmation() {
     let workspace = TestWorkspace::new();
     let bin_dir = workspace.bin_dir().to_string_lossy().into_owned();
@@ -236,7 +322,7 @@ fn shortcut_exec_cancelled_install_returns_cancelled_error() {
 
     let output = support::run_agx_with_stdin(&workspace, &["qoder", "--", "--version"], &[], "n\n");
 
-    assert_eq!(output.status.code(), Some(11));
+    assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(stderr.contains("cancelled"));
 }
@@ -283,7 +369,7 @@ fn shortcut_exec_spawn_failure_surfaces_launch_error() {
         &[("AGX_TEST_EXEC_MODE", "spawn-fail")],
     );
 
-    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(stderr.contains("Failed to launch Qoder CLI"));
 }

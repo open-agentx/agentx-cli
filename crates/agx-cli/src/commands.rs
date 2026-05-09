@@ -107,7 +107,7 @@ fn shortcut_exec_command(args: &[String], context: &CliContext) -> CommandResult
         }
 
         if context.interactive && !context.assume_yes && !confirm_shortcut_install(agent, context) {
-            return CommandResult::error(
+            return CommandResult::error_with_exit_code(
                 "exec",
                 AgxError::new(
                     AgxErrorCode::Cancelled,
@@ -115,6 +115,7 @@ fn shortcut_exec_command(args: &[String], context: &CliContext) -> CommandResult
                 ),
                 CommandTarget::agent(agent.name),
                 context,
+                1,
             );
         }
     }
@@ -740,7 +741,27 @@ fn exec_command(
             )
         }
         Err(error) => {
-            CommandResult::error("exec", error, CommandTarget::agent(agent.name), context)
+            let exit_code_override =
+                if matches!(context.output_mode, crate::context::OutputMode::Human)
+                    && matches!(error.code, AgxErrorCode::InvalidArgument)
+                    && error.message.contains("Failed to launch ")
+                {
+                    Some(1)
+                } else {
+                    None
+                };
+
+            if let Some(exit_code) = exit_code_override {
+                CommandResult::error_with_exit_code(
+                    "exec",
+                    error,
+                    CommandTarget::agent(agent.name),
+                    context,
+                    exit_code,
+                )
+            } else {
+                CommandResult::error("exec", error, CommandTarget::agent(agent.name), context)
+            }
         }
     }
 }

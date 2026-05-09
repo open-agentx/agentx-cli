@@ -160,6 +160,28 @@ impl CommandResult {
         }
     }
 
+    pub fn error_with_exit_code(
+        action: impl Into<String>,
+        error: AgxError,
+        target: CommandTarget,
+        context: &CliContext,
+        exit_code: u8,
+    ) -> Self {
+        Self {
+            action: action.into(),
+            data: None,
+            error: Some(CommandError {
+                code: error.code,
+                message: error.message,
+            }),
+            exit_code: Some(exit_code),
+            meta: create_meta(context),
+            ok: false,
+            target: Some(target),
+            warnings: Vec::new(),
+        }
+    }
+
     pub fn error_with_data(
         action: impl Into<String>,
         data: impl Serialize,

@@ -64,6 +64,20 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - AND forwards arguments to the agent process
 - AND returns a structured execution result
 
+#### Scenario: Explicit execution targets an unknown agent
+
+- WHEN the user runs `agx exec <agent> -- <args>` for an agent outside the catalog
+- THEN AGX returns an `AGENT_NOT_FOUND` result
+- AND uses the stable unknown-agent exit code
+
+#### Scenario: Explicit execution auto-installs in non-interactive mode when requested
+
+- GIVEN the requested agent is not installed
+- WHEN the user runs `agx exec <agent> --install if-missing -- <args>` in non-interactive mode
+- THEN AGX installs the managed agent without prompting
+- AND executes the requested agent command after installation
+- AND returns a successful execution result
+
 #### Scenario: User executes an agent shortcut
 
 - WHEN the user runs `agx <agent> <args>`
@@ -77,6 +91,12 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - THEN AGX asks whether it should install the agent first
 - AND installs before execution when the user confirms
 - AND returns a cancelled result when the user declines
+
+#### Scenario: Shortcut execution targets an unknown agent
+
+- WHEN the user runs `agx <agent> <args>` for an agent outside the catalog
+- THEN AGX returns an `AGENT_NOT_FOUND` result
+- AND uses the stable unknown-agent exit code
 
 ### Requirement: Lifecycle commands MUST support dry-run behavior
 
