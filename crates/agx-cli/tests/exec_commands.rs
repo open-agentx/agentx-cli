@@ -296,6 +296,38 @@ fn explicit_exec_human_mode_returns_agent_process_exit_code() {
 }
 
 #[test]
+fn explicit_exec_human_mode_does_not_capture_child_stdio_in_result_payload() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+
+    let output = run_agx(
+        &workspace,
+        &[
+            "--json",
+            "exec",
+            "qoder",
+            "--install",
+            "never",
+            "--",
+            "--version",
+        ],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert!(json["data"]["execution"]["stdout"].is_string());
+
+    let human_output = run_agx(
+        &workspace,
+        &["exec", "qoder", "--install", "never", "--", "--version"],
+    );
+
+    assert_eq!(human_output.status.code(), Some(0));
+    let stdout = String::from_utf8(human_output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("agx 0.1.0"));
+}
+
+#[test]
 fn shortcut_exec_installs_after_interactive_confirmation() {
     let workspace = TestWorkspace::new();
     let bin_dir = workspace.bin_dir().to_string_lossy().into_owned();

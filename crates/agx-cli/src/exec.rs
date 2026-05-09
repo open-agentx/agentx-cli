@@ -131,18 +131,19 @@ pub fn execute_agent(
     };
 
     let command = build_display_command(&binary_path.to_string_lossy(), args);
-    let output = run_agent_command(&binary_path, args, context.timeout_ms).map_err(|error| {
-        if matches!(error.code, AgxErrorCode::InvalidArgument)
-            && error.message.contains("Failed to execute agent")
-        {
-            AgxError::new(
-                error.code,
-                format!("Failed to launch {}. {}", agent.display_name, error.message),
-            )
-        } else {
-            error
-        }
-    })?;
+    let output =
+        run_agent_command(&binary_path, args, context.timeout_ms, context).map_err(|error| {
+            if matches!(error.code, AgxErrorCode::InvalidArgument)
+                && error.message.contains("Failed to execute agent")
+            {
+                AgxError::new(
+                    error.code,
+                    format!("Failed to launch {}. {}", agent.display_name, error.message),
+                )
+            } else {
+                error
+            }
+        })?;
     Ok(ExecResult {
         agent: exec_agent(agent),
         execution: ExecExecution {
@@ -166,6 +167,7 @@ fn run_agent_command(
     binary_path: &PathBuf,
     args: &[String],
     timeout_ms: Option<u64>,
+    context: &CliContext,
 ) -> Result<AgentCommandOutput, AgxError> {
     if let Ok(mode) = std::env::var("AGX_TEST_EXEC_MODE") {
         return match mode.as_str() {
@@ -193,7 +195,36 @@ fn run_agent_command(
     }
 
     if let Some(timeout_ms) = timeout_ms {
-        return run_agent_command_with_timeout(binary_path, args, timeout_ms);
+        return run_agent_command_with_timeout(
+            binary_path,
+            args,
+            timeout_ms,
+            matches!(context.output_mode, crate::context::OutputMode::Human),
+        );
+    }
+
+    if matches!(context.output_mode, crate::context::OutputMode::Human) {
+        let status = Command::new(binary_path)
+            .args(args)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .map_err(|error| {
+                AgxError::new(
+                    AgxErrorCode::InvalidArgument,
+                    format!("Failed to execute agent: {error}"),
+                )
+            })?;
+
+        return Ok(AgentCommandOutput {
+            exit_code: status
+                .code()
+                .and_then(|code| u8::try_from(code).ok())
+                .unwrap_or(1),
+            stderr: String::new(),
+            stdout: String::new(),
+        });
     }
 
     let output = Command::new(binary_path)
@@ -215,18 +246,25 @@ fn run_agent_command_with_timeout(
     binary_path: &PathBuf,
     args: &[String],
     timeout_ms: u64,
+    inherit_stdio: bool,
 ) -> Result<AgentCommandOutput, AgxError> {
-    let mut child = Command::new(binary_path)
-        .args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| {
-            AgxError::new(
-                AgxErrorCode::InvalidArgument,
-                format!("Failed to execute agent: {error}"),
-            )
-        })?;
+    let mut command = Command::new(binary_path);
+    command.args(args);
+    if inherit_stdio {
+        command
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit());
+    } else {
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    }
+
+    let mut child = command.spawn().map_err(|error| {
+        AgxError::new(
+            AgxErrorCode::InvalidArgument,
+            format!("Failed to execute agent: {error}"),
+        )
+    })?;
 
     let deadline = Instant::now() + Duration::from_millis(timeout_ms);
     loop {
@@ -235,6 +273,23 @@ fn run_agent_command_with_timeout(
             .map_err(|error| AgxError::new(AgxErrorCode::InvalidArgument, error.to_string()))?
             .is_some()
         {
+            if inherit_stdio {
+                let status = child.wait().map_err(|error| {
+                    AgxError::new(
+                        AgxErrorCode::InvalidArgument,
+                        format!("Failed to collect agent status: {error}"),
+                    )
+                })?;
+                return Ok(AgentCommandOutput {
+                    exit_code: status
+                        .code()
+                        .and_then(|code| u8::try_from(code).ok())
+                        .unwrap_or(1),
+                    stderr: String::new(),
+                    stdout: String::new(),
+                });
+            }
+
             let output = child.wait_with_output().map_err(|error| {
                 AgxError::new(
                     AgxErrorCode::InvalidArgument,

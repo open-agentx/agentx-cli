@@ -64,6 +64,12 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - AND forwards arguments to the agent process
 - AND returns a structured execution result
 
+#### Scenario: Human execution preserves interactive agent stdio
+
+- WHEN the user runs `agx exec <agent> -- <args>` or `agx <agent> <args>` in human output mode
+- THEN AGX connects the agent stdin, stdout, and stderr to the current terminal
+- AND interactive agent prompts remain usable during execution
+
 #### Scenario: Explicit execution targets an unknown agent
 
 - WHEN the user runs `agx exec <agent> -- <args>` for an agent outside the catalog

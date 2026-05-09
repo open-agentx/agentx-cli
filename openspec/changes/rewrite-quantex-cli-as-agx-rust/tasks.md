@@ -47,6 +47,7 @@
 - [x] 4.3.5 Close latest `commands` and `schema` human-output parity gaps from `quantex-cli/test/commands/commands.test.ts` and `quantex-cli/test/commands/schema.test.ts`, including command flag / schema reference display in human mode.
 - [x] 4.3.6 Close latest `inspect` human-output parity gaps from `quantex-cli/test/commands/inspect.test.ts`, including latest-version display for installed agents.
 - [x] 4.3.7 Close latest `ensure` and `uninstall` human-output parity gaps from `quantex-cli/test/commands/ensure.test.ts` and `quantex-cli/test/commands/uninstall.test.ts`, including progress and success messaging.
+- [x] 4.3.8 Close P0 latest `run/exec` parity gap from `cursor_quantex_cli_command_coverage_dif.md`, ensuring human-mode execution preserves interactive child stdio instead of capturing it.
 - [x] 4.4 Add AGX agent workflow bootstrap, OpenSpec README/config, and project-memory spec.
 - [x] 4.5 Add task-start and worktree runbooks.
 - [x] 4.6 Add Rust workspace architecture ADR.

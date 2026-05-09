@@ -761,6 +761,7 @@ fn render_info(result: &CommandResult) {
     println!();
 }
 
+#[allow(clippy::too_many_lines)]
 fn render_inspect(result: &CommandResult) {
     if let Some(error) = &result.error {
         println!("{}", error.message);
