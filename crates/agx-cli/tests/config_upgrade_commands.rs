@@ -205,6 +205,7 @@ fn upgrade_check_reports_available_update_with_exit_code_one() {
     assert_eq!(json["data"]["status"], "update-available");
     assert_eq!(json["data"]["channel"], "stable");
     assert_eq!(json["data"]["latestVersion"], "0.2.0");
+    assert_eq!(json["data"]["canAutoUpdate"], true);
 }
 
 #[test]
@@ -406,8 +407,84 @@ fn upgrade_human_output_prints_registry_lag_warning() {
 
     assert!(output.status.success());
     let stdout = stdout_text(&output);
-    assert!(stdout.contains("AGX is already up to date."));
+    assert!(stdout.contains("AGX is already up to date ("));
     assert!(stdout.contains("currently installs 0.1.0"));
+}
+
+#[test]
+fn upgrade_human_output_reports_available_update_with_current_and_latest_versions() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "bun"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["upgrade", "--check"],
+        &[("AGX_TEST_LATEST_VERSION", "0.2.0")],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Update available for AGX CLI:"));
+    assert!(stdout.contains("0.1.0 -> 0.2.0"));
+    assert!(stdout.contains("(stable)."));
+}
+
+#[test]
+fn upgrade_human_output_reports_successful_update_with_version_transition() {
+    let workspace = TestWorkspace::new();
+    let executable = workspace.install_fake_self_binary();
+    let payload_path = workspace.root().join("agx-download.bin");
+    let payload = fs::read(env!("CARGO_BIN_EXE_agx")).expect("test binary should exist");
+    let checksum = format!("{:x}", Sha256::digest(&payload));
+    fs::write(&payload_path, &payload).expect("payload should be written");
+    let manifest_path = workspace.root().join("manifest.json");
+    fs::write(
+        &manifest_path,
+        standalone_manifest_json("0.2.0", &standalone_asset_name(), &checksum, None),
+    )
+    .expect("manifest should be written");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "standalone"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["upgrade"],
+        &[
+            (
+                "AGX_TEST_SELF_EXECUTABLE_PATH",
+                executable.to_string_lossy().as_ref(),
+            ),
+            (
+                "AGX_TEST_STANDALONE_MANIFEST_PATH",
+                manifest_path.to_string_lossy().as_ref(),
+            ),
+            (
+                "AGX_TEST_STANDALONE_DOWNLOAD_PATH",
+                payload_path.to_string_lossy().as_ref(),
+            ),
+            ("AGX_TEST_SKIP_STANDALONE_VERIFY", "1"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Upgrading AGX CLI... (0.1.0 -> 0.2.0)"));
+    assert!(stdout.contains("AGX CLI upgraded successfully."));
 }
 
 #[test]
@@ -459,7 +536,7 @@ fn upgrade_failure_surfaces_bun_recovery_hint() {
     assert_eq!(output.status.code(), Some(1));
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "UPGRADE_FAILED");
-    assert_eq!(json["data"]["status"], "failed");
+    assert_eq!(json["data"]["status"], "manual-required");
     assert_eq!(json["data"]["recoveryHint"], "bun add -g agxctl@latest");
 }
 
@@ -488,6 +565,7 @@ fn upgrade_failure_surfaces_npm_recovery_hint() {
     assert_eq!(output.status.code(), Some(1));
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "UPGRADE_FAILED");
+    assert_eq!(json["data"]["status"], "manual-required");
     assert_eq!(json["data"]["recoveryHint"], "npm install -g agxctl@latest");
 }
 
@@ -516,6 +594,7 @@ fn upgrade_failure_surfaces_lock_retry_hint() {
     assert_eq!(output.status.code(), Some(9));
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "RESOURCE_LOCKED");
+    assert_eq!(json["data"]["status"], "manual-required");
     assert_eq!(json["data"]["recoveryHint"], "npm install -g agxctl@latest");
     assert!(
         json["error"]["message"]
@@ -667,7 +746,7 @@ fn upgrade_standalone_succeeds_with_checksum_verified_payload() {
 
     assert!(output.status.success());
     let json = stdout_json(&output);
-    assert_eq!(json["data"]["status"], "upgraded");
+    assert_eq!(json["data"]["status"], "updated");
     assert_eq!(json["data"]["installSource"], "standalone");
     assert_eq!(json["data"]["verifiedVersion"], env!("CARGO_PKG_VERSION"));
     let replaced = fs::read(&executable).expect("executable should still exist");
@@ -719,7 +798,7 @@ fn upgrade_standalone_rejects_checksum_mismatch() {
     assert_eq!(output.status.code(), Some(1));
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "UPGRADE_FAILED");
-    assert_eq!(json["data"]["status"], "failed");
+    assert_eq!(json["data"]["status"], "manual-required");
     assert!(
         json["error"]["message"]
             .as_str()

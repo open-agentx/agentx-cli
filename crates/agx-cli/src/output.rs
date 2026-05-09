@@ -970,13 +970,20 @@ fn render_upgrade(result: &CommandResult) {
     let status = data["status"].as_str().unwrap_or("unknown");
     match status {
         "update-available" => {
+            let current = data["currentVersion"].as_str().unwrap_or("unknown");
             let latest = data["latestVersion"].as_str().unwrap_or("unknown");
             let channel = data["channel"].as_str().unwrap_or("stable");
-            println!("Update available: {latest} ({channel})");
+            let dry_run = result
+                .warnings
+                .iter()
+                .any(|warning| warning.code == "DRY_RUN");
+            let prefix = if dry_run { "Dry run: " } else { "" };
+            println!("{prefix}Update available for AGX CLI: {current} -> {latest} ({channel}).");
             render_upgrade_warnings(&result.warnings);
         }
         "up-to-date" => {
-            println!("AGX is already up to date.");
+            let current = data["currentVersion"].as_str().unwrap_or("unknown");
+            println!("AGX is already up to date ({current}).");
             if let Some(message) = data["message"].as_str() {
                 println!("{message}");
             }
@@ -994,8 +1001,14 @@ fn render_upgrade(result: &CommandResult) {
             }
             render_upgrade_warnings(&result.warnings);
         }
-        "upgraded" => {
-            println!("AGX upgraded successfully.");
+        "updated" => {
+            let current = data["currentVersion"].as_str().unwrap_or("unknown");
+            let version_hint = data["latestVersion"].as_str().map_or_else(
+                || format!(" ({current})"),
+                |latest| format!(" ({current} -> {latest})"),
+            );
+            println!("Upgrading AGX CLI...{version_hint}");
+            println!("AGX CLI upgraded successfully.");
             render_upgrade_warnings(&result.warnings);
         }
         _ => println!("{data}"),

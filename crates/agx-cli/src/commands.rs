@@ -821,6 +821,7 @@ fn upgrade_command(
             CommandResult::error_with_data(
                 "upgrade",
                 self_upgrade::UpgradeData {
+                    can_auto_update: inspection.can_auto_update,
                     channel: Some(inspection.update_channel),
                     command: Vec::new(),
                     current_version: Some(inspection.current_version),
@@ -841,6 +842,7 @@ fn upgrade_command(
         Err(error) => CommandResult::error_with_data(
             "upgrade",
             self_upgrade::UpgradeData {
+                can_auto_update: inspection.can_auto_update,
                 channel: Some(inspection.update_channel),
                 command: Vec::new(),
                 current_version: Some(inspection.current_version),
@@ -856,7 +858,7 @@ fn upgrade_command(
                 status: if matches!(error.code, AgxErrorCode::ManualActionRequired) {
                     "manual-required"
                 } else {
-                    "failed"
+                    "manual-required"
                 },
                 verified_version: None,
             },
@@ -2254,6 +2256,7 @@ fn schema_catalog() -> Vec<SchemaDocument> {
         },
         SchemaDocument {
             data_schema: object_schema(vec![
+                ("canAutoUpdate", boolean_schema()),
                 ("channel", string_schema()),
                 ("command", array_schema(string_schema())),
                 ("currentVersion", string_schema()),

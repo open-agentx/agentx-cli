@@ -154,6 +154,13 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - THEN AGX marks that agent as outdated when the versions differ
 - AND reports the latest version in the installed agents list
 
+#### Scenario: Self-upgrade status and human output match the stable contract
+
+- WHEN the user runs `agx upgrade` or `agx upgrade --check`
+- THEN AGX reports `update-available`, `up-to-date`, `manual-required`, `check-unavailable`, or `updated` status values
+- AND successful upgrade output reports the current-to-latest version transition when known
+- AND available-update output reports the current and latest versions together with the selected channel
+
 #### Scenario: Human lifecycle commands report install progress
 
 - WHEN the user runs `agx ensure <agent>` or `agx uninstall <agent>`

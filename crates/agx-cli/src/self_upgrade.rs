@@ -18,6 +18,7 @@ const REPOSITORY_URL: &str = env!("CARGO_PKG_REPOSITORY");
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpgradeData {
+    pub can_auto_update: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channel: Option<SelfUpdateChannel>,
     pub command: Vec<String>,
@@ -192,6 +193,7 @@ pub fn upgrade_self(
         };
 
         return Ok(UpgradeData {
+            can_auto_update: can_auto_update(install_source),
             channel: Some(channel),
             command: Vec::new(),
             current_version,
@@ -210,6 +212,7 @@ pub fn upgrade_self(
         && !is_version_newer(latest_version, env!("CARGO_PKG_VERSION"))
     {
         return Ok(UpgradeData {
+            can_auto_update: can_auto_update(install_source),
             channel: Some(channel),
             command: Vec::new(),
             current_version,
@@ -289,6 +292,11 @@ fn upgrade_managed(
             .filter(|latest| is_version_newer(latest, env!("CARGO_PKG_VERSION")))
             .map_or("planned", |_| "update-available");
         return Ok(UpgradeData {
+            can_auto_update: if program == "npm" {
+                can_auto_update(InstallSourceKind::Npm)
+            } else {
+                can_auto_update(InstallSourceKind::Bun)
+            },
             channel: Some(channel),
             command,
             current_version,
@@ -320,6 +328,11 @@ fn upgrade_managed(
     )?;
     let verified_version = verify_current_version();
     Ok(UpgradeData {
+        can_auto_update: if program == "npm" {
+            can_auto_update(InstallSourceKind::Npm)
+        } else {
+            can_auto_update(InstallSourceKind::Bun)
+        },
         channel: Some(channel),
         command,
         current_version,
@@ -333,7 +346,7 @@ fn upgrade_managed(
         recovery_hint: None,
         message: None,
         package_name: AGX_PACKAGE_NAME,
-        status: "upgraded",
+        status: "updated",
         verified_version,
     })
 }
@@ -359,6 +372,7 @@ fn upgrade_standalone(
 
     if context.dry_run {
         return Ok(UpgradeData {
+            can_auto_update: can_auto_update(InstallSourceKind::Standalone),
             channel: Some(channel),
             command: vec![asset.download_url.clone()],
             current_version,
@@ -382,6 +396,7 @@ fn upgrade_standalone(
     perform_standalone_upgrade(asset, executable, manifest.version.as_str())?;
     let verified_version = verify_binary_version(executable);
     Ok(UpgradeData {
+        can_auto_update: can_auto_update(InstallSourceKind::Standalone),
         channel: Some(channel),
         command: vec![asset.download_url.clone()],
         current_version,
@@ -391,7 +406,7 @@ fn upgrade_standalone(
         recovery_hint: None,
         message: None,
         package_name: AGX_PACKAGE_NAME,
-        status: "upgraded",
+        status: "updated",
         verified_version,
     })
 }
