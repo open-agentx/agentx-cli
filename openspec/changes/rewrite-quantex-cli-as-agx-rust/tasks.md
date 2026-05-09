@@ -45,6 +45,7 @@
 - [x] 4.3.3 Close latest `doctor` parity gaps from `quantex-cli/test/commands/doctor.test.ts`, including manual-update guidance for unmanaged PATH agents without a self-update command.
 - [x] 4.3.4 Close latest `doctor` outdated-agent parity gaps from `quantex-cli/test/commands/doctor.test.ts`, including outdated markers for installed agent listings.
 - [x] 4.3.5 Close latest `commands` and `schema` human-output parity gaps from `quantex-cli/test/commands/commands.test.ts` and `quantex-cli/test/commands/schema.test.ts`, including command flag / schema reference display in human mode.
+- [ ] 4.3.6 Close latest `inspect` human-output parity gaps from `quantex-cli/test/commands/inspect.test.ts`, including latest-version display for installed agents.
 - [x] 4.4 Add AGX agent workflow bootstrap, OpenSpec README/config, and project-memory spec.
 - [x] 4.5 Add task-start and worktree runbooks.
 - [x] 4.6 Add Rust workspace architecture ADR.

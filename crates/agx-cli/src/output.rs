@@ -830,6 +830,9 @@ fn render_inspect(result: &CommandResult) {
     if let Some(version) = data["inspection"]["installedVersion"].as_str() {
         println!("  Version:      {version}");
     }
+    if let Some(latest) = data["inspection"]["latestVersion"].as_str() {
+        println!("  Latest:       {latest}");
+    }
     if let Some(path) = data["inspection"]["binaryPath"].as_str() {
         println!("  Path:         {path}");
     }

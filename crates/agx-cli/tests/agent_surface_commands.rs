@@ -162,6 +162,32 @@ fn inspect_exposes_install_methods_and_self_update_metadata() {
 }
 
 #[test]
+fn inspect_human_output_shows_latest_version_for_installed_agent() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx(&workspace, &["inspect", "qoder"]);
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Latest:       0.1.0"));
+}
+
+#[test]
 fn inspect_unknown_agent_returns_agent_not_found() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "inspect", "missing-agent"]);

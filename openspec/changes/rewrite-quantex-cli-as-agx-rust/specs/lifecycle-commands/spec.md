@@ -105,6 +105,13 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - AND includes installed version and launch path data when available
 - AND provides install guidance when the agent is missing
 
+#### Scenario: Inspect output reports latest version details for installed agents
+
+- WHEN the user runs `agx inspect <agent>`
+- THEN AGX shows the installed version when available
+- AND shows the latest version when available
+- AND includes the agent install methods in human-readable form
+
 #### Scenario: Doctor reports manual update guidance for unmanaged PATH agents
 
 - GIVEN an agent is visible in PATH but not tracked as a managed install
