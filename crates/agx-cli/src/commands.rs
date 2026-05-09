@@ -736,20 +736,13 @@ fn exec_command(
             )
         }
         Err(error) => {
-            let exit_code_override =
-                if matches!(context.output_mode, crate::context::OutputMode::Human)
-                    && matches!(error.code, AgxErrorCode::InvalidArgument)
-                    && error.message.contains("Failed to launch ")
-                {
-                    Some(1)
-                } else if matches!(context.output_mode, crate::context::OutputMode::Human)
-                    && matches!(error.code, AgxErrorCode::Cancelled)
-                    && error.message.starts_with("Installation cancelled for ")
-                {
-                    Some(1)
-                } else {
-                    None
-                };
+            let human_exec_failure =
+                matches!(context.output_mode, crate::context::OutputMode::Human)
+                    && ((matches!(error.code, AgxErrorCode::InvalidArgument)
+                        && error.message.contains("Failed to launch "))
+                        || (matches!(error.code, AgxErrorCode::Cancelled)
+                            && error.message.starts_with("Installation cancelled for ")));
+            let exit_code_override = if human_exec_failure { Some(1) } else { None };
 
             if let Some(exit_code) = exit_code_override {
                 CommandResult::error_with_exit_code(
@@ -787,57 +780,37 @@ fn upgrade_command(
     };
     match self_upgrade::upgrade_self(context, channel, check) {
         Ok(result) => {
-            let stale_latest = result
-                .latest_version
-                .as_deref()
-                .zip(result.current_version.as_deref())
-                .is_some_and(|(latest, current)| self_upgrade::is_version_older(latest, current));
-            let mirror_lag = inspection
-                .latest_version
-                .as_deref()
-                .zip(inspection.upstream_latest_version.as_deref())
-                .is_some_and(|(latest, upstream)| latest != upstream)
-                && matches!(
-                    inspection.install_source,
-                    self_upgrade::InstallSourceKind::Bun | self_upgrade::InstallSourceKind::Npm
-                );
             let mut command_result = if check && result.status == "update-available" {
                 CommandResult::success_with_exit_code("upgrade", result, target, context, 1)
             } else {
                 CommandResult::success("upgrade", result, target, context)
             };
-            if stale_latest {
-                command_result.warnings.push(CommandWarning {
-                    code: "STALE_LATEST_VERSION".to_string(),
-                    message: "Selected registry reported a version older than the current AGX build; downgrade was skipped.".to_string(),
-                });
-            }
-            if mirror_lag {
-                command_result.warnings.push(CommandWarning {
-                    code: "MIRROR_LAG".to_string(),
-                    message: format!(
-                        "The selected registry currently installs {}, while upstream npm has {}. Retry later or set selfUpdateRegistry to another registry if you need the upstream release now.",
-                        inspection.latest_version.as_deref().unwrap_or("unknown"),
-                        inspection.upstream_latest_version.as_deref().unwrap_or("unknown")
-                    ),
-                });
-            }
-            if context.dry_run {
+            add_upgrade_informational_warnings(&mut command_result, &inspection);
+            if context.dry_run
+                && command_result
+                    .data
+                    .as_ref()
+                    .and_then(|data| data.get("status"))
+                    .and_then(serde_json::Value::as_str)
+                    == Some("update-available")
+            {
                 command_result.warnings.push(dry_run_warning());
             }
             command_result
         }
-        Err(error) if check && matches!(error.code, AgxErrorCode::NetworkError) => {
-            CommandResult::error_with_data(
+        Err(error)
+            if (check || context.dry_run) && matches!(error.code, AgxErrorCode::NetworkError) =>
+        {
+            let mut command_result = CommandResult::error_with_data(
                 "upgrade",
                 self_upgrade::UpgradeData {
                     can_auto_update: inspection.can_auto_update,
                     channel: Some(inspection.update_channel),
                     command: Vec::new(),
-                    current_version: Some(inspection.current_version),
+                    current_version: Some(inspection.current_version.clone()),
                     dry_run: context.dry_run,
                     install_source: inspection.install_source,
-                    latest_version: inspection.latest_version,
+                    latest_version: inspection.latest_version.clone(),
                     recovery_hint: None,
                     message: Some(error.message.clone()),
                     package_name: "agxctl",
@@ -847,36 +820,106 @@ fn upgrade_command(
                 error,
                 target,
                 context,
-            )
+            );
+            add_upgrade_informational_warnings(&mut command_result, &inspection);
+            command_result
         }
-        Err(error) => CommandResult::error_with_data(
-            "upgrade",
-            self_upgrade::UpgradeData {
-                can_auto_update: inspection.can_auto_update,
-                channel: Some(inspection.update_channel),
-                command: Vec::new(),
-                current_version: Some(inspection.current_version),
-                dry_run: context.dry_run,
-                install_source: inspection.install_source,
-                latest_version: inspection.latest_version,
-                recovery_hint: self_upgrade::get_recovery_hint(
-                    inspection.install_source,
-                    inspection.update_channel,
-                ),
-                message: Some(error.message.clone()),
-                package_name: "agxctl",
-                status: if matches!(error.code, AgxErrorCode::ManualActionRequired) {
-                    "manual-required"
-                } else {
-                    "manual-required"
+        Err(error) => {
+            let recovery_hint = self_upgrade::get_recovery_hint(
+                inspection.install_source,
+                inspection.update_channel,
+            );
+            let error_details = Some(upgrade_error_details(&error));
+            let mut command_result = CommandResult::error_with_data_and_details(
+                "upgrade",
+                self_upgrade::UpgradeData {
+                    can_auto_update: inspection.can_auto_update,
+                    channel: Some(inspection.update_channel),
+                    command: Vec::new(),
+                    current_version: Some(inspection.current_version.clone()),
+                    dry_run: context.dry_run,
+                    install_source: inspection.install_source,
+                    latest_version: inspection.latest_version.clone(),
+                    recovery_hint: recovery_hint.clone(),
+                    message: Some(error.message.clone()),
+                    package_name: "agxctl",
+                    status: "manual-required",
+                    verified_version: None,
                 },
-                verified_version: None,
-            },
-            error,
-            target,
-            context,
-        ),
+                error,
+                error_details,
+                target,
+                context,
+            );
+            add_upgrade_informational_warnings(&mut command_result, &inspection);
+            if matches!(
+                command_result.error.as_ref().map(|error| error.code),
+                Some(AgxErrorCode::UpgradeFailed | AgxErrorCode::ResourceLocked)
+            ) && let Some(recovery_hint) = recovery_hint
+            {
+                command_result.warnings.push(CommandWarning {
+                    code: "MANUAL_RECOVERY".to_string(),
+                    message: format!("Manual recovery: {recovery_hint}"),
+                });
+            }
+            command_result
+        }
     }
+}
+
+fn add_upgrade_informational_warnings(
+    command_result: &mut CommandResult,
+    inspection: &self_upgrade::SelfInspection,
+) {
+    let stale_latest = inspection
+        .latest_version
+        .as_deref()
+        .is_some_and(|latest| self_upgrade::is_version_older(latest, &inspection.current_version));
+    let mirror_lag = inspection
+        .latest_version
+        .as_deref()
+        .zip(inspection.upstream_latest_version.as_deref())
+        .is_some_and(|(latest, upstream)| latest != upstream)
+        && matches!(
+            inspection.install_source,
+            self_upgrade::InstallSourceKind::Bun | self_upgrade::InstallSourceKind::Npm
+        );
+
+    if stale_latest {
+        command_result.warnings.push(CommandWarning {
+            code: "STALE_LATEST_VERSION".to_string(),
+            message: format!(
+                "The resolved latest version {} is older than the installed AGX CLI {}. AGX will not downgrade; retry with --refresh or --no-cache if you need a fresh check.",
+                inspection.latest_version.as_deref().unwrap_or("unknown"),
+                inspection.current_version
+            ),
+        });
+    }
+    if mirror_lag {
+        command_result.warnings.push(CommandWarning {
+            code: "MIRROR_LAG".to_string(),
+            message: format!(
+                "The selected registry currently installs {}, while upstream npm has {}. Retry later or set selfUpdateRegistry to another registry if you need the upstream release now.",
+                inspection.latest_version.as_deref().unwrap_or("unknown"),
+                inspection.upstream_latest_version.as_deref().unwrap_or("unknown")
+            ),
+        });
+    }
+}
+
+fn upgrade_error_details(error: &AgxError) -> serde_json::Value {
+    let kind = if error.code == AgxErrorCode::ResourceLocked
+        || error.message.contains("already running")
+    {
+        "locked"
+    } else if error.message.contains("replace the current AGX binary")
+        || error.message.contains("replace standalone AGX binary")
+    {
+        "permission"
+    } else {
+        "unknown"
+    };
+    serde_json::json!({ "kind": kind })
 }
 
 #[allow(clippy::too_many_lines)]

@@ -1047,21 +1047,29 @@ fn render_resolve(result: &CommandResult) {
 fn render_upgrade(result: &CommandResult) {
     if let Some(error) = &result.error {
         if let Some(data) = &result.data {
-            if data["status"].as_str() == Some("manual-required") {
+            if data["status"].as_str() == Some("check-unavailable") {
+                println!("{}", error.message);
+                render_upgrade_informational_warnings(&result.warnings);
+                return;
+            }
+            if data["status"].as_str() == Some("manual-required")
+                && matches!(error.code, AgxErrorCode::ManualActionRequired)
+            {
                 println!("{}", error.message);
                 if let Some(recovery_hint) = data["recoveryHint"].as_str() {
                     println!("Next step: {recovery_hint}");
                 }
                 return;
             }
-            println!("Failed to upgrade AGX.");
+            let current = data["currentVersion"].as_str().unwrap_or("unknown");
+            let version_hint = data["latestVersion"].as_str().map_or_else(
+                || format!(" ({current})"),
+                |latest| format!(" ({current} -> {latest})"),
+            );
+            println!("Upgrading AGX CLI...{version_hint}");
+            println!("Failed to upgrade AGX CLI.");
             println!("Reason: {}", error.message);
-            if let Some(recovery_hint) = data["recoveryHint"].as_str() {
-                println!("Next step: {recovery_hint}");
-            }
-            if let Some(message) = data["message"].as_str() {
-                println!("{message}");
-            }
+            render_upgrade_failure_warnings(&result.warnings);
         } else {
             println!("{}", error.message);
         }
@@ -1083,7 +1091,7 @@ fn render_upgrade(result: &CommandResult) {
                 .any(|warning| warning.code == "DRY_RUN");
             let prefix = if dry_run { "Dry run: " } else { "" };
             println!("{prefix}Update available for AGX CLI: {current} -> {latest} ({channel}).");
-            render_upgrade_warnings(&result.warnings);
+            render_upgrade_informational_warnings(&result.warnings);
         }
         "up-to-date" => {
             let current = data["currentVersion"].as_str().unwrap_or("unknown");
@@ -1091,7 +1099,7 @@ fn render_upgrade(result: &CommandResult) {
             if let Some(message) = data["message"].as_str() {
                 println!("{message}");
             }
-            render_upgrade_warnings(&result.warnings);
+            render_upgrade_informational_warnings(&result.warnings);
         }
         "planned" => {
             println!("Planned AGX upgrade:");
@@ -1103,7 +1111,7 @@ fn render_upgrade(result: &CommandResult) {
                     .join(" ");
                 println!("{command}");
             }
-            render_upgrade_warnings(&result.warnings);
+            render_upgrade_informational_warnings(&result.warnings);
         }
         "updated" => {
             let current = data["currentVersion"].as_str().unwrap_or("unknown");
@@ -1113,15 +1121,33 @@ fn render_upgrade(result: &CommandResult) {
             );
             println!("Upgrading AGX CLI...{version_hint}");
             println!("AGX CLI upgraded successfully.");
-            render_upgrade_warnings(&result.warnings);
+            render_upgrade_informational_warnings(&result.warnings);
         }
         _ => println!("{data}"),
     }
 }
 
-fn render_upgrade_warnings(warnings: &[CommandWarning]) {
+fn render_upgrade_informational_warnings(warnings: &[CommandWarning]) {
     for warning in warnings {
+        if matches!(warning.code.as_str(), "DRY_RUN" | "MANUAL_RECOVERY") {
+            continue;
+        }
         println!("{}", warning.message);
+    }
+}
+
+fn render_upgrade_failure_warnings(warnings: &[CommandWarning]) {
+    for warning in warnings {
+        if warning.code == "MANUAL_RECOVERY" {
+            println!(
+                "{}",
+                warning
+                    .message
+                    .replacen("Manual recovery:", "Next step:", 1)
+            );
+        } else if warning.code != "DRY_RUN" {
+            println!("{}", warning.message);
+        }
     }
 }
 

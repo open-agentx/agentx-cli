@@ -287,10 +287,12 @@ fn upgrade_managed(
     let command: Vec<String> = std::iter::once(program.to_string()).chain(args).collect();
 
     if context.dry_run {
-        let status = latest_version
-            .as_deref()
-            .filter(|latest| is_version_newer(latest, env!("CARGO_PKG_VERSION")))
-            .map_or("planned", |_| "update-available");
+        let Some(latest_version) = latest_version else {
+            return Err(AgxError::new(
+                AgxErrorCode::NetworkError,
+                "Unable to determine the latest AGX version.",
+            ));
+        };
         return Ok(UpgradeData {
             can_auto_update: if program == "npm" {
                 can_auto_update(InstallSourceKind::Npm)
@@ -306,13 +308,11 @@ fn upgrade_managed(
             } else {
                 InstallSourceKind::Bun
             },
-            latest_version,
+            latest_version: Some(latest_version),
             recovery_hint: None,
-            message: Some(format!(
-                "Dry run: would run managed self-upgrade through {program}."
-            )),
+            message: None,
             package_name: AGX_PACKAGE_NAME,
-            status,
+            status: "update-available",
             verified_version: None,
         });
     }
@@ -383,12 +383,9 @@ fn upgrade_standalone(
                 "download and replace the binary from {}",
                 asset.download_url
             )),
-            message: Some(format!(
-                "Dry run: would download {} and replace the standalone AGX binary.",
-                asset.name
-            )),
+            message: None,
             package_name: AGX_PACKAGE_NAME,
-            status: "planned",
+            status: "update-available",
             verified_version: None,
         });
     }
@@ -510,10 +507,7 @@ fn run_external_command(
             } else {
                 AgxErrorCode::UpgradeFailed
             },
-            recovery_hint.map_or_else(
-                || message.to_string(),
-                |hint| format!("{message} Next step: {hint}"),
-            ),
+            recovery_hint.map_or_else(|| message.to_string(), |_| message.to_string()),
         ));
     }
 

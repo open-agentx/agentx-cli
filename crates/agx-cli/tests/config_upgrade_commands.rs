@@ -75,7 +75,7 @@ fn config_rejects_unknown_actions() {
 }
 
 #[test]
-fn upgrade_dry_run_uses_recorded_bun_install_source() {
+fn upgrade_dry_run_without_latest_version_reports_check_unavailable_for_bun() {
     let workspace = TestWorkspace::new();
     workspace.write_state_bytes(
         br#"{
@@ -89,15 +89,15 @@ fn upgrade_dry_run_uses_recorded_bun_install_source() {
 
     let output = run_agx(&workspace, &["--json", "--dry-run", "upgrade"]);
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(6));
     let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "NETWORK_ERROR");
     assert_eq!(json["data"]["installSource"], "bun");
-    assert_eq!(json["data"]["status"], "planned");
-    assert_eq!(json["data"]["command"][0], "bun");
+    assert_eq!(json["data"]["status"], "check-unavailable");
 }
 
 #[test]
-fn upgrade_dry_run_uses_recorded_npm_install_source() {
+fn upgrade_dry_run_without_latest_version_reports_check_unavailable_for_npm() {
     let workspace = TestWorkspace::new();
     workspace.write_state_bytes(
         br#"{
@@ -111,11 +111,11 @@ fn upgrade_dry_run_uses_recorded_npm_install_source() {
 
     let output = run_agx(&workspace, &["--json", "--dry-run", "upgrade"]);
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(6));
     let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "NETWORK_ERROR");
     assert_eq!(json["data"]["installSource"], "npm");
-    assert_eq!(json["data"]["status"], "planned");
-    assert_eq!(json["data"]["command"][0], "npm");
+    assert_eq!(json["data"]["status"], "check-unavailable");
 }
 
 #[test]
@@ -142,6 +142,13 @@ fn upgrade_dry_run_reports_update_available_without_invoking_upgrade() {
     assert_eq!(json["data"]["installSource"], "bun");
     assert_eq!(json["data"]["status"], "update-available");
     assert_eq!(json["warnings"][0]["code"], "DRY_RUN");
+    assert_eq!(
+        json["warnings"]
+            .as_array()
+            .expect("warnings should exist")
+            .len(),
+        1
+    );
     assert_eq!(json["data"]["command"][0], "bun");
 }
 
@@ -243,6 +250,31 @@ fn upgrade_check_reports_check_unavailable_when_latest_version_cannot_be_resolve
             .expect("message should exist")
             .contains("Unable to determine the latest")
     );
+}
+
+#[test]
+fn upgrade_check_unavailable_human_output_reports_resolution_failure() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "bun"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["upgrade", "--check"],
+        &[("AGX_TEST_LATEST_VERSION", "")],
+    );
+
+    assert_eq!(output.status.code(), Some(6));
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Unable to determine the latest AGX version."));
+    assert!(!stdout.contains("Failed to upgrade AGX"));
 }
 
 #[test]
@@ -373,9 +405,10 @@ fn upgrade_check_uses_beta_channel_for_dist_tag_and_command() {
     assert_eq!(check_json["data"]["channel"], "beta");
     assert_eq!(check_json["data"]["latestVersion"], "0.3.0-beta.1");
 
-    let dry_run_output = run_agx(
+    let dry_run_output = run_agx_with_env(
         &workspace,
         &["--json", "--dry-run", "upgrade", "--channel", "beta"],
+        &[("AGX_TEST_LATEST_VERSION", "0.3.0-beta.1")],
     );
     assert!(dry_run_output.status.success());
     let dry_run_json = stdout_json(&dry_run_output);
@@ -506,7 +539,11 @@ fn upgrade_ndjson_emits_single_result_event() {
 "#,
     );
 
-    let output = run_agx(&workspace, &["--output", "ndjson", "--dry-run", "upgrade"]);
+    let output = run_agx_with_env(
+        &workspace,
+        &["--output", "ndjson", "--dry-run", "upgrade"],
+        &[("AGX_TEST_LATEST_VERSION", "0.2.0")],
+    );
 
     assert!(output.status.success());
     let lines = stdout_json_lines(&output);
@@ -542,8 +579,14 @@ fn upgrade_failure_surfaces_bun_recovery_hint() {
     assert_eq!(output.status.code(), Some(1));
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "UPGRADE_FAILED");
+    assert_eq!(json["error"]["details"]["kind"], "unknown");
     assert_eq!(json["data"]["status"], "manual-required");
     assert_eq!(json["data"]["recoveryHint"], "bun add -g agxctl@latest");
+    assert_eq!(json["warnings"][0]["code"], "MANUAL_RECOVERY");
+    assert_eq!(
+        json["warnings"][0]["message"],
+        "Manual recovery: bun add -g agxctl@latest"
+    );
 }
 
 #[test]
@@ -571,8 +614,10 @@ fn upgrade_failure_surfaces_npm_recovery_hint() {
     assert_eq!(output.status.code(), Some(1));
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "UPGRADE_FAILED");
+    assert_eq!(json["error"]["details"]["kind"], "unknown");
     assert_eq!(json["data"]["status"], "manual-required");
     assert_eq!(json["data"]["recoveryHint"], "npm install -g agxctl@latest");
+    assert_eq!(json["warnings"][0]["code"], "MANUAL_RECOVERY");
 }
 
 #[test]
@@ -600,8 +645,10 @@ fn upgrade_failure_surfaces_lock_retry_hint() {
     assert_eq!(output.status.code(), Some(9));
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "RESOURCE_LOCKED");
+    assert_eq!(json["error"]["details"]["kind"], "locked");
     assert_eq!(json["data"]["status"], "manual-required");
     assert_eq!(json["data"]["recoveryHint"], "npm install -g agxctl@latest");
+    assert_eq!(json["warnings"][0]["code"], "MANUAL_RECOVERY");
     assert!(
         json["error"]["message"]
             .as_str()
@@ -648,7 +695,8 @@ fn upgrade_standalone_dry_run_returns_download_plan() {
     assert!(output.status.success());
     let json = stdout_json(&output);
     assert_eq!(json["data"]["installSource"], "standalone");
-    assert_eq!(json["data"]["status"], "planned");
+    assert_eq!(json["data"]["status"], "update-available");
+    assert_eq!(json["warnings"][0]["code"], "DRY_RUN");
     assert_eq!(
         json["data"]["command"][0],
         format!(
@@ -662,6 +710,37 @@ fn upgrade_standalone_dry_run_returns_download_plan() {
             .expect("recoveryHint should exist")
             .contains(&standalone_asset_name())
     );
+}
+
+#[test]
+fn upgrade_failure_human_output_surfaces_reason_and_next_step() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "bun"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["upgrade"],
+        &[
+            ("AGX_TEST_LATEST_VERSION", "0.2.0"),
+            ("AGX_TEST_UPGRADE_FAILURE", "bun"),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Upgrading AGX CLI... (0.1.0 -> 0.2.0)"));
+    assert!(stdout.contains("Failed to upgrade AGX CLI."));
+    assert!(stdout.contains("Reason: Failed to update agxctl through Bun."));
+    assert!(stdout.contains("Next step: bun add -g agxctl@latest"));
+    assert!(!stdout.contains("Reason: Failed to update agxctl through Bun. Next step:"));
 }
 
 #[test]
