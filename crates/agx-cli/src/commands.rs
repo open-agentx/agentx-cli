@@ -342,6 +342,8 @@ struct Resolution {
     install_guidance: Option<InstallGuidance>,
     installed: bool,
     install_source: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    installed_version: Option<String>,
     lifecycle: String,
     source_label: String,
     suggested_launch_command: Vec<String>,
@@ -1417,10 +1419,6 @@ fn resolve_command(agent_name: &str, context: &CliContext) -> CommandResult {
     let inspection = resolved_agent_inspection(agent, context);
     let install_methods = install_methods(agent);
     let installed = inspection.installed;
-    let suggested_launch_command = inspection.binary_path.as_ref().map_or_else(
-        || vec![agent.binary_name.to_string()],
-        |binary_path| vec![binary_path.clone()],
-    );
     let resolution = Resolution {
         binary_path: inspection.binary_path.clone(),
         install_guidance: (!installed).then_some(InstallGuidance {
@@ -1430,10 +1428,30 @@ fn resolve_command(agent_name: &str, context: &CliContext) -> CommandResult {
             suggested_ensure_command: format!("agx ensure {}", agent.name),
         }),
         installed,
-        install_source: install_source_for(agent),
-        lifecycle: inspection.lifecycle,
-        source_label: inspection.source_label,
-        suggested_launch_command,
+        install_source: if installed {
+            install_source_for(agent)
+        } else {
+            "not-installed"
+        },
+        installed_version: inspection.installed_version.clone(),
+        lifecycle: if installed {
+            inspection.lifecycle
+        } else {
+            "unmanaged".to_string()
+        },
+        source_label: if installed {
+            inspection.source_label
+        } else {
+            "not installed".to_string()
+        },
+        suggested_launch_command: if installed {
+            inspection
+                .binary_path
+                .as_ref()
+                .map_or_else(Vec::new, |binary_path| vec![binary_path.clone()])
+        } else {
+            Vec::new()
+        },
     };
     let data = ResolveData {
         agent: agent_info(agent),
@@ -2470,6 +2488,7 @@ fn resolution_schema() -> JsonSchema {
         ("installGuidance", install_guidance_schema()),
         ("installed", boolean_schema()),
         ("installSource", string_schema()),
+        ("installedVersion", string_schema()),
         ("lifecycle", string_schema()),
         ("sourceLabel", string_schema()),
         ("suggestedLaunchCommand", array_schema(string_schema())),

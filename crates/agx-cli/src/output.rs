@@ -860,6 +860,19 @@ fn render_resolve(result: &CommandResult) {
 
     if let Some(error) = &result.error {
         println!("{}", error.message);
+        if let Some(guidance) = data["resolution"]["installGuidance"].as_object() {
+            if let Some(ensure) = guidance["suggestedEnsureCommand"].as_str() {
+                println!("{ensure}");
+            }
+            if let Some(methods) = guidance["installMethods"].as_array() {
+                for method in methods {
+                    let label = method["label"].as_str().unwrap_or("unknown");
+                    let command = method["command"].as_str().unwrap_or("");
+                    println!("Install: [{label}] {command}");
+                }
+            }
+        }
+        return;
     }
     if !data["resolution"]["installed"].as_bool().unwrap_or(false) {
         if let Some(ensure) =
@@ -882,6 +895,9 @@ fn render_resolve(result: &CommandResult) {
     }
     if let Some(source) = data["resolution"]["sourceLabel"].as_str() {
         println!("  Source:        {source}");
+    }
+    if let Some(version) = data["resolution"]["installedVersion"].as_str() {
+        println!("  Version:      {version}");
     }
     if let Some(launch) = data["resolution"]["suggestedLaunchCommand"].as_array() {
         let launch = launch

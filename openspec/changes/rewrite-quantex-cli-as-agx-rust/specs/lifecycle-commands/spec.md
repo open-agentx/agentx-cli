@@ -98,6 +98,13 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - THEN AGX returns an `AGENT_NOT_FOUND` result
 - AND uses the stable unknown-agent exit code
 
+#### Scenario: Resolve output reports install guidance and launch details
+
+- WHEN the user runs `agx resolve <agent>` or `agx resolve <agent> --json`
+- THEN AGX reports whether the agent is installed
+- AND includes installed version and launch path data when available
+- AND provides install guidance when the agent is missing
+
 ### Requirement: Lifecycle commands MUST support dry-run behavior
 
 AGX SHALL support dry-run planning for lifecycle and execution commands that can mutate state or invoke external installers.

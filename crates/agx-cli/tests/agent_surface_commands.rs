@@ -205,6 +205,15 @@ fn resolve_returns_install_guidance_for_missing_binary() {
         json["data"]["resolution"]["installGuidance"]["suggestedEnsureCommand"],
         "agx ensure qoder"
     );
+    assert_eq!(json["data"]["resolution"]["installSource"], "not-installed");
+    assert_eq!(json["data"]["resolution"]["lifecycle"], "unmanaged");
+    assert_eq!(json["data"]["resolution"]["sourceLabel"], "not installed");
+    assert!(
+        json["data"]["resolution"]["suggestedLaunchCommand"]
+            .as_array()
+            .expect("launch command should be an array")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -275,6 +284,7 @@ fn resolve_returns_binary_path_for_installed_agent() {
             .contains("qodercli")
     );
     assert!(json["data"]["resolution"]["installGuidance"].is_null());
+    assert_eq!(json["data"]["resolution"]["installedVersion"], "0.1.0");
 }
 
 #[test]
@@ -287,6 +297,8 @@ fn resolve_human_output_prints_ensure_guidance_for_missing_agent_binary() {
     let stdout = stdout_text(&output);
     assert!(stdout.contains("Qoder CLI is not installed."));
     assert!(stdout.contains("agx ensure qoder"));
+    assert!(stdout.contains("Install: [bun] bun add -g @qoder-ai/qodercli"));
+    assert!(stdout.contains("Install: [npm] npm install -g @qoder-ai/qodercli"));
 }
 
 #[test]
@@ -315,6 +327,7 @@ fn resolve_human_output_prints_binary_details_for_installed_agent() {
     assert!(stdout.contains("Qoder CLI"));
     assert!(stdout.contains("Path:"));
     assert!(stdout.contains("Install Type:  bun"));
+    assert!(stdout.contains("Version:      0.1.0"));
     assert!(stdout.contains("Launch:"));
 }
 
