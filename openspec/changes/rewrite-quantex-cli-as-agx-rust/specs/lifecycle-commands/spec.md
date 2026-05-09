@@ -126,6 +126,12 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - THEN AGX marks that agent as outdated when the versions differ
 - AND reports the latest version in the installed agents list
 
+#### Scenario: Human lifecycle commands report install progress
+
+- WHEN the user runs `agx ensure <agent>` or `agx uninstall <agent>`
+- THEN AGX renders a human-readable progress message for the lifecycle action
+- AND renders a human-readable completion message when the action succeeds
+
 ### Requirement: Lifecycle commands MUST support dry-run behavior
 
 AGX SHALL support dry-run planning for lifecycle and execution commands that can mutate state or invoke external installers.

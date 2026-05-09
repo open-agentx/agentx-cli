@@ -369,6 +369,22 @@ fn ensure_successfully_records_managed_install_state() {
 }
 
 #[test]
+fn ensure_human_output_shows_install_progress_and_success() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["ensure", "qoder"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Ensuring Qoder CLI..."));
+    assert!(stdout.contains("Qoder CLI is now installed."));
+}
+
+#[test]
 fn ensure_explains_when_existing_binary_is_not_tracked() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
@@ -550,6 +566,36 @@ fn uninstall_successfully_removes_recorded_install_state() {
 
     let state = fs::read_to_string(workspace.state_file()).expect("state file should exist");
     assert!(!state.contains("\"qoder\""));
+}
+
+#[test]
+fn uninstall_human_output_shows_progress_and_success() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["uninstall", "qoder"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Uninstalling Qoder CLI..."));
+    assert!(stdout.contains("Qoder CLI uninstalled successfully"));
 }
 
 #[test]

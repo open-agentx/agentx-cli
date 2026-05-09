@@ -313,12 +313,14 @@ fn render_human(result: &CommandResult) {
                 render_doctor(data);
             }
         }
+        "ensure" => render_ensure(result),
         "exec" => render_exec(result),
         "install" => render_install(result),
         "list" => render_list(result),
         "info" => render_info(result),
         "inspect" => render_inspect(result),
         "resolve" => render_resolve(result),
+        "uninstall" => render_uninstall(result),
         "upgrade" => render_upgrade(result),
         "update" => render_update(result),
         _ => {
@@ -1096,6 +1098,59 @@ fn render_install(result: &CommandResult) {
 
     println!("Installing {display_name}...");
     println!("{display_name} installed successfully!");
+}
+
+fn render_ensure(result: &CommandResult) {
+    if let Some(error) = &result.error {
+        eprintln!("{}", error.message);
+        return;
+    }
+
+    let Some(data) = &result.data else {
+        return;
+    };
+
+    let display_name = data["agent"]["displayName"].as_str().unwrap_or("Agent");
+    if result
+        .warnings
+        .iter()
+        .any(|warning| warning.code == "DRY_RUN")
+    {
+        println!("Dry run: would ensure {display_name}.");
+        return;
+    }
+
+    if let Some(message) = data["message"].as_str() {
+        println!("{message}");
+        return;
+    }
+
+    println!("Ensuring {display_name}...");
+    println!("{display_name} is now installed.");
+}
+
+fn render_uninstall(result: &CommandResult) {
+    if let Some(error) = &result.error {
+        eprintln!("{}", error.message);
+        return;
+    }
+
+    let Some(data) = &result.data else {
+        return;
+    };
+
+    let display_name = data["agent"]["displayName"].as_str().unwrap_or("Agent");
+    if result
+        .warnings
+        .iter()
+        .any(|warning| warning.code == "DRY_RUN")
+    {
+        println!("Dry run: would uninstall {display_name}.");
+        return;
+    }
+
+    println!("Uninstalling {display_name}...");
+    println!("{display_name} uninstalled successfully");
 }
 
 fn render_install_batch(data: &Value) {
