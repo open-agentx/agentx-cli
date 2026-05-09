@@ -77,6 +77,7 @@ AGX SHALL publish stable command-catalog and schema-catalog metadata for automat
 - WHEN the user runs `agx schema --json`
 - THEN envelope schemas and nested data schemas set `additionalProperties: false`
 - AND object schemas mark their required fields explicitly
+- AND fields that are omitted at runtime such as `meta.source`, `meta.fetchedAt`, `meta.staleAfter`, `error.details`, `target.name`, and install-guidance subobjects remain optional in the published schema
 - AND the command metadata schema keeps `source`, `fetchedAt`, and `staleAfter` as optional freshness fields
 
 #### Scenario: Structured result metadata uses stable ISO-8601 timestamps

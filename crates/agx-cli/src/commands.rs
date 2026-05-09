@@ -2013,66 +2013,87 @@ fn is_command_available(command: &str) -> bool {
 
 #[allow(clippy::too_many_lines)]
 fn schema_catalog() -> Vec<SchemaDocument> {
-    let envelope_schema = object_schema(vec![
-        ("action", string_schema()),
-        ("data", object_schema(Vec::new())),
-        (
-            "error",
-            object_schema(vec![
-                ("code", string_schema()),
-                ("details", loose_object_schema()),
-                ("message", string_schema()),
-            ]),
-        ),
-        ("exitCode", integer_schema()),
-        (
-            "meta",
-            object_schema(vec![
-                ("mode", string_schema()),
-                ("runId", string_schema()),
-                ("schemaVersion", string_schema()),
-                ("source", string_schema()),
-                ("fetchedAt", string_schema()),
-                ("staleAfter", string_schema()),
-                ("timestamp", string_schema()),
-                ("version", string_schema()),
-            ]),
-        ),
-        ("ok", boolean_schema()),
-        (
-            "target",
-            object_schema(vec![("kind", string_schema()), ("name", string_schema())]),
-        ),
-        (
-            "warnings",
-            array_schema(object_schema(vec![
-                ("code", string_schema()),
-                ("message", string_schema()),
-            ])),
-        ),
-    ]);
-    let ndjson_event_schema = object_schema(vec![
-        ("action", string_schema()),
-        ("data", object_schema(Vec::new())),
-        (
-            "meta",
-            object_schema(vec![
-                ("mode", string_schema()),
-                ("runId", string_schema()),
-                ("schemaVersion", string_schema()),
-                ("source", string_schema()),
-                ("fetchedAt", string_schema()),
-                ("staleAfter", string_schema()),
-                ("timestamp", string_schema()),
-                ("version", string_schema()),
-            ]),
-        ),
-        (
-            "target",
-            object_schema(vec![("kind", string_schema()), ("name", string_schema())]),
-        ),
-        ("type", string_schema()),
-    ]);
+    let envelope_schema = object_schema_with_required(
+        vec!["action", "error", "meta", "ok", "warnings"],
+        vec![
+            ("action", string_schema()),
+            ("data", object_schema(Vec::new())),
+            (
+                "error",
+                object_schema_with_required(
+                    vec!["code", "message"],
+                    vec![
+                        ("code", string_schema()),
+                        ("details", loose_object_schema()),
+                        ("message", string_schema()),
+                    ],
+                ),
+            ),
+            ("exitCode", integer_schema()),
+            (
+                "meta",
+                object_schema_with_required(
+                    vec!["mode", "runId", "schemaVersion", "timestamp", "version"],
+                    vec![
+                        ("mode", string_schema()),
+                        ("runId", string_schema()),
+                        ("schemaVersion", string_schema()),
+                        ("source", string_schema()),
+                        ("fetchedAt", string_schema()),
+                        ("staleAfter", string_schema()),
+                        ("timestamp", string_schema()),
+                        ("version", string_schema()),
+                    ],
+                ),
+            ),
+            ("ok", boolean_schema()),
+            (
+                "target",
+                object_schema_with_required(
+                    vec!["kind"],
+                    vec![("kind", string_schema()), ("name", string_schema())],
+                ),
+            ),
+            (
+                "warnings",
+                array_schema(object_schema(vec![
+                    ("code", string_schema()),
+                    ("message", string_schema()),
+                ])),
+            ),
+        ],
+    );
+    let ndjson_event_schema = object_schema_with_required(
+        vec!["action", "meta", "type"],
+        vec![
+            ("action", string_schema()),
+            ("data", object_schema(Vec::new())),
+            (
+                "meta",
+                object_schema_with_required(
+                    vec!["mode", "runId", "schemaVersion", "timestamp", "version"],
+                    vec![
+                        ("mode", string_schema()),
+                        ("runId", string_schema()),
+                        ("schemaVersion", string_schema()),
+                        ("source", string_schema()),
+                        ("fetchedAt", string_schema()),
+                        ("staleAfter", string_schema()),
+                        ("timestamp", string_schema()),
+                        ("version", string_schema()),
+                    ],
+                ),
+            ),
+            (
+                "target",
+                object_schema_with_required(
+                    vec!["kind"],
+                    vec![("kind", string_schema()), ("name", string_schema())],
+                ),
+            ),
+            ("type", string_schema()),
+        ],
+    );
 
     vec![
         SchemaDocument {
@@ -2208,11 +2229,14 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             data_schema: object_schema(vec![
                 (
                     "agent",
-                    object_schema(vec![
-                        ("binaryName", string_schema()),
-                        ("displayName", string_schema()),
-                        ("name", string_schema()),
-                    ]),
+                    object_schema_with_required(
+                        vec!["name"],
+                        vec![
+                            ("binaryName", string_schema()),
+                            ("displayName", string_schema()),
+                            ("name", string_schema()),
+                        ],
+                    ),
                 ),
                 ("execution", exec_execution_schema()),
             ]),
@@ -2281,19 +2305,29 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             ndjson_event_schema: ndjson_event_schema.clone(),
         },
         SchemaDocument {
-            data_schema: object_schema(vec![
-                ("canAutoUpdate", boolean_schema()),
-                ("channel", string_schema()),
-                ("command", array_schema(string_schema())),
-                ("currentVersion", string_schema()),
-                ("dryRun", boolean_schema()),
-                ("installSource", string_schema()),
-                ("latestVersion", string_schema()),
-                ("message", string_schema()),
-                ("packageName", string_schema()),
-                ("status", string_schema()),
-                ("verifiedVersion", string_schema()),
-            ]),
+            data_schema: object_schema_with_required(
+                vec![
+                    "canAutoUpdate",
+                    "command",
+                    "dryRun",
+                    "installSource",
+                    "packageName",
+                    "status",
+                ],
+                vec![
+                    ("canAutoUpdate", boolean_schema()),
+                    ("channel", string_schema()),
+                    ("command", array_schema(string_schema())),
+                    ("currentVersion", string_schema()),
+                    ("dryRun", boolean_schema()),
+                    ("installSource", string_schema()),
+                    ("latestVersion", string_schema()),
+                    ("message", string_schema()),
+                    ("packageName", string_schema()),
+                    ("status", string_schema()),
+                    ("verifiedVersion", string_schema()),
+                ],
+            ),
             description: "AGX self-upgrade result",
             envelope_schema: envelope_schema.clone(),
             name: "upgrade",
@@ -2313,49 +2347,75 @@ fn schema_catalog() -> Vec<SchemaDocument> {
 }
 
 fn lifecycle_data_schema() -> JsonSchema {
-    object_schema(vec![
-        ("agent", lifecycle_agent_schema()),
-        ("changed", boolean_schema()),
-        ("installState", installed_agent_state_schema()),
-        ("installed", boolean_schema()),
-        ("message", string_schema()),
-    ])
+    object_schema_with_required(
+        vec!["agent", "changed", "installed"],
+        vec![
+            ("agent", lifecycle_agent_schema()),
+            ("changed", boolean_schema()),
+            ("installState", installed_agent_state_schema()),
+            ("installed", boolean_schema()),
+            ("message", string_schema()),
+            (
+                "warnings",
+                array_schema(object_schema(vec![
+                    ("code", string_schema()),
+                    ("message", string_schema()),
+                ])),
+            ),
+        ],
+    )
 }
 
 fn install_data_schema() -> JsonSchema {
-    object_schema(vec![
-        ("agent", lifecycle_agent_schema()),
-        ("changed", boolean_schema()),
-        ("installState", installed_agent_state_schema()),
-        ("installed", boolean_schema()),
-        ("message", string_schema()),
-        (
-            "results",
-            array_schema(lifecycle_batch_result_item_schema()),
-        ),
-        ("scope", string_schema()),
-        ("summary", lifecycle_batch_summary_schema()),
-    ])
+    object_schema_with_required(
+        vec!["agent", "changed", "installed"],
+        vec![
+            ("agent", lifecycle_agent_schema()),
+            ("changed", boolean_schema()),
+            ("installState", installed_agent_state_schema()),
+            ("installed", boolean_schema()),
+            ("message", string_schema()),
+            (
+                "warnings",
+                array_schema(object_schema(vec![
+                    ("code", string_schema()),
+                    ("message", string_schema()),
+                ])),
+            ),
+            (
+                "results",
+                array_schema(lifecycle_batch_result_item_schema()),
+            ),
+            ("scope", string_schema()),
+            ("summary", lifecycle_batch_summary_schema()),
+        ],
+    )
 }
 
 fn schema_document_schema() -> JsonSchema {
-    object_schema(vec![
-        ("dataSchema", json_schema_schema()),
-        ("description", string_schema()),
-        ("envelopeSchema", json_schema_schema()),
-        ("name", string_schema()),
-        ("ndjsonEventSchema", json_schema_schema()),
-    ])
+    object_schema_with_required(
+        vec!["dataSchema", "description", "envelopeSchema", "name"],
+        vec![
+            ("dataSchema", json_schema_schema()),
+            ("description", string_schema()),
+            ("envelopeSchema", json_schema_schema()),
+            ("name", string_schema()),
+            ("ndjsonEventSchema", json_schema_schema()),
+        ],
+    )
 }
 
 fn json_schema_schema() -> JsonSchema {
-    object_schema(vec![
-        ("additionalProperties", boolean_schema()),
-        ("items", object_schema(Vec::new())),
-        ("properties", array_schema(schema_property_schema())),
-        ("required", array_schema(string_schema())),
-        ("type", string_schema()),
-    ])
+    object_schema_with_required(
+        vec!["type"],
+        vec![
+            ("additionalProperties", boolean_schema()),
+            ("items", object_schema(Vec::new())),
+            ("properties", array_schema(schema_property_schema())),
+            ("required", array_schema(string_schema())),
+            ("type", string_schema()),
+        ],
+    )
 }
 
 fn schema_property_schema() -> JsonSchema {
@@ -2394,10 +2454,10 @@ fn feature_capabilities_schema() -> JsonSchema {
 }
 
 fn installer_availability_schema() -> JsonSchema {
-    object_schema(vec![
-        ("available", boolean_schema()),
-        ("reason", string_schema()),
-    ])
+    object_schema_with_required(
+        vec!["available"],
+        vec![("available", boolean_schema()), ("reason", string_schema())],
+    )
 }
 
 fn installer_capabilities_schema() -> JsonSchema {
@@ -2438,28 +2498,42 @@ fn install_method_schema() -> JsonSchema {
 }
 
 fn agent_info_schema() -> JsonSchema {
-    object_schema(vec![
-        ("aliases", array_schema(string_schema())),
-        ("binaryName", string_schema()),
-        ("displayName", string_schema()),
-        ("homepage", string_schema()),
-        ("installMethods", array_schema(install_method_schema())),
-        ("name", string_schema()),
-        ("packageName", string_schema()),
-        ("selfUpdateCommands", array_schema(string_schema())),
-    ])
+    object_schema_with_required(
+        vec![
+            "aliases",
+            "binaryName",
+            "displayName",
+            "homepage",
+            "installMethods",
+            "name",
+            "selfUpdateCommands",
+        ],
+        vec![
+            ("aliases", array_schema(string_schema())),
+            ("binaryName", string_schema()),
+            ("displayName", string_schema()),
+            ("homepage", string_schema()),
+            ("installMethods", array_schema(install_method_schema())),
+            ("name", string_schema()),
+            ("packageName", string_schema()),
+            ("selfUpdateCommands", array_schema(string_schema())),
+        ],
+    )
 }
 
 fn agent_inspection_schema() -> JsonSchema {
-    object_schema(vec![
-        ("binaryPath", string_schema()),
-        ("installed", boolean_schema()),
-        ("installedVersion", string_schema()),
-        ("latestVersion", string_schema()),
-        ("lifecycle", string_schema()),
-        ("sourceLabel", string_schema()),
-        ("updateLabel", string_schema()),
-    ])
+    object_schema_with_required(
+        vec!["installed", "lifecycle", "sourceLabel", "updateLabel"],
+        vec![
+            ("binaryPath", string_schema()),
+            ("installed", boolean_schema()),
+            ("installedVersion", string_schema()),
+            ("latestVersion", string_schema()),
+            ("lifecycle", string_schema()),
+            ("sourceLabel", string_schema()),
+            ("updateLabel", string_schema()),
+        ],
+    )
 }
 
 fn agent_capabilities_schema() -> JsonSchema {
@@ -2474,17 +2548,28 @@ fn agent_capabilities_schema() -> JsonSchema {
 }
 
 fn listed_agent_schema() -> JsonSchema {
-    object_schema(vec![
-        ("binaryName", string_schema()),
-        ("displayName", string_schema()),
-        ("installed", boolean_schema()),
-        ("installedVersion", string_schema()),
-        ("latestVersion", string_schema()),
-        ("lifecycle", string_schema()),
-        ("name", string_schema()),
-        ("sourceLabel", string_schema()),
-        ("updateLabel", string_schema()),
-    ])
+    object_schema_with_required(
+        vec![
+            "binaryName",
+            "displayName",
+            "installed",
+            "lifecycle",
+            "name",
+            "sourceLabel",
+            "updateLabel",
+        ],
+        vec![
+            ("binaryName", string_schema()),
+            ("displayName", string_schema()),
+            ("installed", boolean_schema()),
+            ("installedVersion", string_schema()),
+            ("latestVersion", string_schema()),
+            ("lifecycle", string_schema()),
+            ("name", string_schema()),
+            ("sourceLabel", string_schema()),
+            ("updateLabel", string_schema()),
+        ],
+    )
 }
 
 fn install_guidance_schema() -> JsonSchema {
@@ -2497,16 +2582,25 @@ fn install_guidance_schema() -> JsonSchema {
 }
 
 fn resolution_schema() -> JsonSchema {
-    object_schema(vec![
-        ("binaryPath", string_schema()),
-        ("installGuidance", install_guidance_schema()),
-        ("installed", boolean_schema()),
-        ("installSource", string_schema()),
-        ("installedVersion", string_schema()),
-        ("lifecycle", string_schema()),
-        ("sourceLabel", string_schema()),
-        ("suggestedLaunchCommand", array_schema(string_schema())),
-    ])
+    object_schema_with_required(
+        vec![
+            "installed",
+            "installSource",
+            "lifecycle",
+            "sourceLabel",
+            "suggestedLaunchCommand",
+        ],
+        vec![
+            ("binaryPath", string_schema()),
+            ("installGuidance", install_guidance_schema()),
+            ("installed", boolean_schema()),
+            ("installSource", string_schema()),
+            ("installedVersion", string_schema()),
+            ("lifecycle", string_schema()),
+            ("sourceLabel", string_schema()),
+            ("suggestedLaunchCommand", array_schema(string_schema())),
+        ],
+    )
 }
 
 fn exec_install_guidance_schema() -> JsonSchema {
@@ -2520,14 +2614,23 @@ fn exec_install_guidance_schema() -> JsonSchema {
 }
 
 fn exec_execution_schema() -> JsonSchema {
-    object_schema(vec![
-        ("args", array_schema(string_schema())),
-        ("installGuidance", exec_install_guidance_schema()),
-        ("installPolicy", string_schema()),
-        ("installed", boolean_schema()),
-        ("interactive", boolean_schema()),
-        ("launched", boolean_schema()),
-    ])
+    object_schema_with_required(
+        vec![
+            "args",
+            "installPolicy",
+            "installed",
+            "interactive",
+            "launched",
+        ],
+        vec![
+            ("args", array_schema(string_schema())),
+            ("installGuidance", exec_install_guidance_schema()),
+            ("installPolicy", string_schema()),
+            ("installed", boolean_schema()),
+            ("interactive", boolean_schema()),
+            ("launched", boolean_schema()),
+        ],
+    )
 }
 
 fn lifecycle_agent_schema() -> JsonSchema {
@@ -2538,53 +2641,70 @@ fn lifecycle_agent_schema() -> JsonSchema {
 }
 
 fn installed_agent_state_schema() -> JsonSchema {
-    object_schema(vec![
-        ("agentName", string_schema()),
-        ("command", string_schema()),
-        ("installType", string_schema()),
-        ("packageName", string_schema()),
-        ("packageTargetKind", string_schema()),
-    ])
+    object_schema_with_required(
+        vec!["agentName", "installType"],
+        vec![
+            ("agentName", string_schema()),
+            ("command", string_schema()),
+            ("installType", string_schema()),
+            ("packageName", string_schema()),
+            ("packageTargetKind", string_schema()),
+        ],
+    )
 }
 
 fn update_result_schema() -> JsonSchema {
-    object_schema(vec![
-        ("displayName", string_schema()),
-        ("hint", string_schema()),
-        ("installedVersion", string_schema()),
-        ("latestVersion", string_schema()),
-        ("message", string_schema()),
-        ("name", string_schema()),
-        ("resource", string_schema()),
-        ("status", string_schema()),
-        ("strategy", string_schema()),
-    ])
+    object_schema_with_required(
+        vec!["displayName", "name", "status"],
+        vec![
+            ("displayName", string_schema()),
+            ("hint", string_schema()),
+            ("installedVersion", string_schema()),
+            ("latestVersion", string_schema()),
+            ("message", string_schema()),
+            ("name", string_schema()),
+            ("resource", string_schema()),
+            ("status", string_schema()),
+            ("strategy", string_schema()),
+        ],
+    )
 }
 
 fn lifecycle_batch_result_item_schema() -> JsonSchema {
-    object_schema(vec![
-        ("agent", lifecycle_agent_schema()),
-        ("changed", boolean_schema()),
-        (
-            "error",
-            object_schema(vec![
-                ("code", string_schema()),
-                ("message", string_schema()),
-            ]),
-        ),
-        ("input", string_schema()),
-        ("installState", installed_agent_state_schema()),
-        ("installed", boolean_schema()),
-        ("ok", boolean_schema()),
-        ("status", string_schema()),
-        (
+    object_schema_with_required(
+        vec![
+            "agent",
+            "changed",
+            "input",
+            "installed",
+            "ok",
+            "status",
             "warnings",
-            array_schema(object_schema(vec![
-                ("code", string_schema()),
-                ("message", string_schema()),
-            ])),
-        ),
-    ])
+        ],
+        vec![
+            ("agent", lifecycle_agent_schema()),
+            ("changed", boolean_schema()),
+            (
+                "error",
+                object_schema(vec![
+                    ("code", string_schema()),
+                    ("message", string_schema()),
+                ]),
+            ),
+            ("input", string_schema()),
+            ("installState", installed_agent_state_schema()),
+            ("installed", boolean_schema()),
+            ("ok", boolean_schema()),
+            ("status", string_schema()),
+            (
+                "warnings",
+                array_schema(object_schema(vec![
+                    ("code", string_schema()),
+                    ("message", string_schema()),
+                ])),
+            ),
+        ],
+    )
 }
 
 fn lifecycle_batch_summary_schema() -> JsonSchema {
@@ -2849,6 +2969,13 @@ fn dry_run_warning() -> CommandWarning {
 
 fn object_schema(properties: Vec<(&'static str, JsonSchema)>) -> JsonSchema {
     let required = properties.iter().map(|(name, _)| *name).collect();
+    object_schema_with_required(required, properties)
+}
+
+fn object_schema_with_required(
+    required: Vec<&'static str>,
+    properties: Vec<(&'static str, JsonSchema)>,
+) -> JsonSchema {
     JsonSchema {
         additional_properties: Some(false),
         items: None,
