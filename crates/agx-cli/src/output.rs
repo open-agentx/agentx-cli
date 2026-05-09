@@ -604,9 +604,6 @@ fn render_config(data: &Value) {
 #[allow(clippy::too_many_lines)]
 fn render_doctor(data: &Value) {
     println!("AGX Environment Check\n");
-    if let Some(summary) = data["summary"].as_str() {
-        println!("{summary}\n");
-    }
     println!("Managed Installers:");
     println!(
         "  Bun:   {}",

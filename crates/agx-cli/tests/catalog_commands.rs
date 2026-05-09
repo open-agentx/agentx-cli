@@ -297,9 +297,25 @@ fn schema_doctor_describes_machine_actionable_issue_fields() {
 
     assert!(output.status.success());
     let json = stdout_json(&output);
+    let required = json["data"]["commands"][0]["dataSchema"]["required"]
+        .as_array()
+        .expect("doctor required should be an array");
     let properties = json["data"]["commands"][0]["dataSchema"]["properties"]
         .as_array()
         .expect("doctor properties should be an array");
+    assert!(required.iter().any(|item| item == "agents"));
+    assert!(required.iter().any(|item| item == "installers"));
+    assert!(required.iter().any(|item| item == "issues"));
+    assert!(required.iter().any(|item| item == "self"));
+    assert!(!properties.iter().any(|item| item["name"] == "checks"));
+    assert!(
+        !properties
+            .iter()
+            .any(|item| item["name"] == "installSource")
+    );
+    assert!(!properties.iter().any(|item| item["name"] == "ok"));
+    assert!(!properties.iter().any(|item| item["name"] == "paths"));
+    assert!(!properties.iter().any(|item| item["name"] == "summary"));
     let issues = properties
         .iter()
         .find(|item| item["name"] == "issues")

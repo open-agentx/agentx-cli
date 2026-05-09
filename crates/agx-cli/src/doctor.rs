@@ -1,27 +1,19 @@
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use serde::Serialize;
 
 use crate::agents;
 use crate::context::CliContext;
 use crate::inspection;
 use crate::self_upgrade::{self, SelfInspection};
-use crate::state::{self, AgxState};
+use crate::state;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DoctorData {
     pub agents: Vec<DoctorAgent>,
-    pub checks: Vec<DoctorCheck>,
-    pub install_source: InstallSource,
     pub installers: Installers,
     pub issues: Vec<DoctorIssue>,
-    pub ok: bool,
-    pub paths: DoctorPaths,
     #[serde(rename = "self")]
     pub self_status: SelfStatus,
-    pub summary: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -35,52 +27,6 @@ pub struct DoctorAgent {
     pub lifecycle: &'static str,
     pub outdated: bool,
     pub source_label: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DoctorCheck {
-    pub name: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub recovery_hint: Option<String>,
-    pub status: CheckStatus,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum CheckStatus {
-    Ok,
-    Warn,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InstallSource {
-    pub kind: InstallSourceKind,
-    pub confidence: &'static str,
-    pub executable: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub recorded: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum InstallSourceKind {
-    Bun,
-    Npm,
-    SourceBuild,
-    Standalone,
-    Unknown,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DoctorPaths {
-    pub config_file: String,
-    pub executable: String,
-    pub state_file: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -130,48 +76,20 @@ pub struct IssueSubject {
 }
 
 pub fn run_doctor(context: &CliContext) -> DoctorData {
-    let executable = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("agx"));
-    let state_file = state::state_file_path();
-    let config_file = state_file.parent().map_or_else(
-        || PathBuf::from("config.json"),
-        |parent| parent.join("config.json"),
-    );
     let self_inspection = self_upgrade::inspect_self_with_context(None, context);
-    let install_source = inspect_install_source(&executable);
     let installers = Installers {
         brew: inspection::find_binary_in_path("brew").is_some(),
         bun: inspection::find_binary_in_path("bun").is_some(),
         npm: inspection::find_binary_in_path("npm").is_some(),
         winget: inspection::find_binary_in_path("winget").is_some(),
     };
-
-    let checks = vec![
-        executable_check(&executable),
-        installer_check("bun"),
-        installer_check("npm"),
-        json_file_check::<AgxState>("state", &state_file),
-        json_file_check::<serde_json::Value>("config", &config_file),
-        lock_check("state-lock", &state_file),
-        lock_check("self-upgrade", &state_file),
-    ];
-    let ok = checks
-        .iter()
-        .all(|check| matches!(check.status, CheckStatus::Ok));
     let agents = inspected_agents();
     let issues = doctor_issues(&installers, &self_inspection, &agents);
 
     DoctorData {
         agents,
-        checks,
-        install_source,
         installers,
         issues,
-        ok,
-        paths: DoctorPaths {
-            config_file: config_file.to_string_lossy().into_owned(),
-            executable: executable.to_string_lossy().into_owned(),
-            state_file: state_file.to_string_lossy().into_owned(),
-        },
         self_status: SelfStatus {
             can_auto_update: self_inspection.can_auto_update,
             current_version: self_inspection.current_version.clone(),
@@ -187,157 +105,7 @@ pub fn run_doctor(context: &CliContext) -> DoctorData {
                 None
             },
         },
-        summary: if ok {
-            "AGX runtime checks passed."
-        } else {
-            "AGX runtime checks completed with warnings."
-        },
     }
-}
-
-fn inspect_install_source(executable: &Path) -> InstallSource {
-    let recorded = state::load_state().self_state.install_source;
-    if let Some(recorded) = recorded.as_deref() {
-        return InstallSource {
-            kind: match recorded {
-                "bun" => InstallSourceKind::Bun,
-                "npm" => InstallSourceKind::Npm,
-                "standalone" => InstallSourceKind::Standalone,
-                "source-build" => InstallSourceKind::SourceBuild,
-                _ => InstallSourceKind::Unknown,
-            },
-            confidence: "recorded",
-            executable: executable.to_string_lossy().into_owned(),
-            recorded: Some(recorded.to_string()),
-        };
-    }
-
-    let executable_text = executable.to_string_lossy().replace('\\', "/");
-    let (kind, confidence) =
-        if executable_text.contains("/node_modules/") || executable_text.contains("/npm/") {
-            (InstallSourceKind::Npm, "heuristic")
-        } else if executable_text.contains("/.bun/") || executable_text.contains("/bun/") {
-            (InstallSourceKind::Bun, "heuristic")
-        } else if executable_text.contains("/target/debug/")
-            || executable_text.contains("/target/release/")
-        {
-            (InstallSourceKind::SourceBuild, "heuristic")
-        } else if executable
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .is_some_and(|stem| stem.eq_ignore_ascii_case("agx"))
-        {
-            (InstallSourceKind::Standalone, "heuristic")
-        } else {
-            (InstallSourceKind::Unknown, "low")
-        };
-
-    InstallSource {
-        kind,
-        confidence,
-        executable: executable.to_string_lossy().into_owned(),
-        recorded: None,
-    }
-}
-
-fn executable_check(executable: &Path) -> DoctorCheck {
-    if executable.is_file() {
-        DoctorCheck {
-            name: "executable",
-            detail: Some(executable.to_string_lossy().into_owned()),
-            recovery_hint: None,
-            status: CheckStatus::Ok,
-        }
-    } else {
-        DoctorCheck {
-            name: "executable",
-            detail: Some(executable.to_string_lossy().into_owned()),
-            recovery_hint: Some(
-                "Reinstall AGX from its original distribution channel.".to_string(),
-            ),
-            status: CheckStatus::Warn,
-        }
-    }
-}
-
-fn installer_check(binary_name: &'static str) -> DoctorCheck {
-    if inspection::find_binary_in_path(binary_name).is_some() {
-        DoctorCheck {
-            name: binary_name,
-            detail: Some("available on PATH".to_string()),
-            recovery_hint: None,
-            status: CheckStatus::Ok,
-        }
-    } else {
-        DoctorCheck {
-            name: binary_name,
-            detail: Some("not found on PATH".to_string()),
-            recovery_hint: Some(format!(
-                "Install {binary_name} if you want AGX to manage npm/Bun distributed agents through that channel."
-            )),
-            status: CheckStatus::Warn,
-        }
-    }
-}
-
-fn json_file_check<T>(name: &'static str, path: &Path) -> DoctorCheck
-where
-    T: serde::de::DeserializeOwned,
-{
-    if !path.exists() {
-        return DoctorCheck {
-            name,
-            detail: Some(format!("{} does not exist yet", path.to_string_lossy())),
-            recovery_hint: None,
-            status: CheckStatus::Ok,
-        };
-    }
-
-    match fs::read_to_string(path)
-        .ok()
-        .and_then(|raw| serde_json::from_str::<T>(strip_json_bom(&raw)).ok())
-    {
-        Some(_) => DoctorCheck {
-            name,
-            detail: Some(format!("{} is valid JSON", path.to_string_lossy())),
-            recovery_hint: None,
-            status: CheckStatus::Ok,
-        },
-        None => DoctorCheck {
-            name,
-            detail: Some(format!("{} could not be parsed", path.to_string_lossy())),
-            recovery_hint: Some("Move the file aside or repair it as valid JSON.".to_string()),
-            status: CheckStatus::Warn,
-        },
-    }
-}
-
-fn lock_check(name: &'static str, state_file: &Path) -> DoctorCheck {
-    let lock_path = state_file.parent().map_or_else(
-        || PathBuf::from(format!("{name}.lock")),
-        |parent| parent.join(format!("{name}.lock")),
-    );
-    if lock_path.exists() {
-        DoctorCheck {
-            name,
-            detail: Some(format!("{} exists", lock_path.to_string_lossy())),
-            recovery_hint: Some(
-                "If no AGX process is running, remove the stale lock file.".to_string(),
-            ),
-            status: CheckStatus::Warn,
-        }
-    } else {
-        DoctorCheck {
-            name,
-            detail: Some("not locked".to_string()),
-            recovery_hint: None,
-            status: CheckStatus::Ok,
-        }
-    }
-}
-
-fn strip_json_bom(raw: &str) -> &str {
-    raw.strip_prefix('\u{feff}').unwrap_or(raw)
 }
 
 fn inspected_agents() -> Vec<DoctorAgent> {
@@ -528,6 +296,10 @@ fn doctor_issues(
                 ],
             });
 
+            if !agent.outdated {
+                continue;
+            }
+
             let self_update_commands = agents::self_update_commands(agent_definition);
             let suggested_action = if self_update_commands.is_empty() {
                 "follow-manual-agent-update"
@@ -542,15 +314,15 @@ fn doctor_issues(
                     .map(ToString::to_string)
                     .collect()
             };
-            let message = if suggested_commands.is_empty() {
+            let recovery_hint = if suggested_commands.is_empty() {
                 format!(
-                    "{} is available in PATH but not tracked as a managed AGX install. Reinstall through AGX if you want managed lifecycle operations.",
+                    "Reinstall through AGX if you want managed lifecycle operations for {}.",
                     agent.display_name
                 )
             } else {
                 format!(
-                    "{} can update itself, but AGX cannot verify or manage that untracked install automatically.",
-                    agent.display_name
+                    "Run {} to update the current unmanaged install.",
+                    suggested_commands.join(" or ")
                 )
             };
 
@@ -559,7 +331,14 @@ fn doctor_issues(
                 category: "agent",
                 code: "AGENT_MANUAL_UPDATE_REQUIRED",
                 docs_ref: Some("docs/runbooks/quantex-troubleshooting.md"),
-                message,
+                message: format!(
+                    "{} {} is behind {}, but the current source is {}. {}",
+                    agent.display_name,
+                    agent.installed_version.as_deref().unwrap_or("unknown"),
+                    agent.latest_version.as_deref().unwrap_or("unknown"),
+                    agent.source_label,
+                    recovery_hint
+                ),
                 severity: "warning",
                 subject: IssueSubject {
                     kind: "agent",

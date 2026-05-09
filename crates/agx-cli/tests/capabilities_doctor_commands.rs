@@ -56,7 +56,7 @@ fn capabilities_ndjson_emits_single_result_event() {
 }
 
 #[test]
-fn doctor_json_reports_recorded_install_source_and_missing_installers() {
+fn doctor_json_reports_self_install_source_and_missing_installers() {
     let workspace = TestWorkspace::new();
     workspace.write_state_bytes(
         br#"{
@@ -73,34 +73,9 @@ fn doctor_json_reports_recorded_install_source_and_missing_installers() {
     assert!(output.status.success());
     let json = stdout_json(&output);
     assert_eq!(json["action"], "doctor");
-    assert_eq!(json["data"]["installSource"]["kind"], "bun");
-    assert_eq!(json["data"]["installSource"]["confidence"], "recorded");
-    assert_eq!(json["data"]["ok"], false);
-    assert_eq!(json["data"]["checks"][1]["name"], "bun");
-    assert_eq!(json["data"]["checks"][1]["status"], "warn");
-    assert_eq!(json["data"]["checks"][2]["name"], "npm");
-    assert_eq!(json["data"]["checks"][2]["status"], "warn");
-}
-
-#[test]
-fn doctor_json_exposes_paths() {
-    let workspace = TestWorkspace::new();
-    let output = run_agx(&workspace, &["--json", "doctor"]);
-
-    assert!(output.status.success());
-    let json = stdout_json(&output);
-    assert!(
-        json["data"]["paths"]["stateFile"]
-            .as_str()
-            .expect("state file should exist")
-            .contains(".quantex")
-    );
-    assert!(
-        json["data"]["paths"]["configFile"]
-            .as_str()
-            .expect("config file should exist")
-            .contains(".quantex")
-    );
+    assert_eq!(json["data"]["self"]["installSource"], "bun");
+    assert_eq!(json["data"]["installers"]["bun"], false);
+    assert_eq!(json["data"]["installers"]["npm"], false);
 }
 
 #[test]
@@ -156,11 +131,39 @@ fn doctor_json_reports_untracked_agent_issue() {
 }
 
 #[test]
+fn doctor_json_does_not_report_manual_update_for_unmanaged_agent_without_outdated_signal() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("claude");
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "doctor"],
+        &[("AGX_TEST_LATEST_PACKAGE__ANTHROPIC_AI_CLAUDE_CODE", "0.1.0")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let issues = json["data"]["issues"]
+        .as_array()
+        .expect("issues should be an array");
+
+    assert!(
+        !issues
+            .iter()
+            .any(|issue| issue["code"] == "AGENT_MANUAL_UPDATE_REQUIRED")
+    );
+}
+
+#[test]
 fn doctor_json_reports_self_update_guidance_for_untracked_self_updating_agent() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("claude");
 
-    let output = run_agx(&workspace, &["--json", "doctor"]);
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "doctor"],
+        &[("AGX_TEST_LATEST_PACKAGE__ANTHROPIC_AI_CLAUDE_CODE", "1.0.0")],
+    );
 
     assert!(output.status.success());
     let json = stdout_json(&output);
@@ -178,9 +181,13 @@ fn doctor_json_reports_self_update_guidance_for_untracked_self_updating_agent() 
 #[test]
 fn doctor_json_reports_manual_update_guidance_for_untracked_agent_without_self_update() {
     let workspace = TestWorkspace::new();
-    workspace.install_fake_agent_binary("jcode");
+    workspace.install_fake_agent_binary("junie");
 
-    let output = run_agx(&workspace, &["--json", "doctor"]);
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "doctor"],
+        &[("AGX_TEST_LATEST_PACKAGE__JETBRAINS_JUNIE", "1.0.0")],
+    );
 
     assert!(output.status.success());
     let json = stdout_json(&output);
@@ -189,7 +196,7 @@ fn doctor_json_reports_manual_update_guidance_for_untracked_agent_without_self_u
         .expect("issues should be an array");
     assert!(issues.iter().any(|issue| {
         issue["code"] == "AGENT_MANUAL_UPDATE_REQUIRED"
-            && issue["subject"]["name"] == "jcode"
+            && issue["subject"]["name"] == "junie"
             && issue["suggestedAction"] == "follow-manual-agent-update"
             && issue["suggestedCommands"]
                 .as_array()
@@ -199,55 +206,31 @@ fn doctor_json_reports_manual_update_guidance_for_untracked_agent_without_self_u
 }
 
 #[test]
-fn doctor_json_uses_source_build_heuristic_without_recorded_state() {
+fn doctor_json_does_not_expose_agx_only_runtime_fields() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "doctor"]);
 
     assert!(output.status.success());
     let json = stdout_json(&output);
-    assert_eq!(json["data"]["installSource"]["kind"], "source-build");
-    assert_eq!(json["data"]["installSource"]["confidence"], "heuristic");
+    let data = &json["data"];
+    assert!(data.get("checks").is_none());
+    assert!(data.get("installSource").is_none());
+    assert!(data.get("ok").is_none());
+    assert!(data.get("paths").is_none());
+    assert!(data.get("summary").is_none());
 }
 
 #[test]
-fn doctor_json_warns_for_invalid_config_and_stale_lock() {
+fn doctor_human_output_includes_expected_sections() {
     let workspace = TestWorkspace::new();
-    workspace.write_config_bytes(b"{not-valid-json}\n");
-    fs::write(workspace.config_dir().join("state-lock.lock"), b"locked")
-        .expect("lock file should be writable");
-
-    let output = run_agx(&workspace, &["--json", "doctor"]);
-
-    assert!(output.status.success());
-    let json = stdout_json(&output);
-    let checks = json["data"]["checks"]
-        .as_array()
-        .expect("checks should be an array");
-
-    assert!(
-        checks
-            .iter()
-            .any(|check| { check["name"] == "config" && check["status"] == "warn" })
-    );
-    assert!(
-        checks
-            .iter()
-            .any(|check| { check["name"] == "state-lock" && check["status"] == "warn" })
-    );
-}
-
-#[test]
-fn doctor_human_output_includes_summary_and_check_names() {
-    let workspace = TestWorkspace::new();
-    workspace.write_config_bytes(b"{not-valid-json}\n");
-
     let output = run_agx(&workspace, &["doctor"]);
 
     assert!(output.status.success());
     let stdout = stdout_text(&output);
-    assert!(stdout.contains("AGX runtime checks completed with warnings."));
+    assert!(stdout.contains("AGX Environment Check"));
     assert!(stdout.contains("Managed Installers:"));
     assert!(stdout.contains("AGX CLI:"));
+    assert!(stdout.contains("Installed Agents:"));
     assert!(stdout.contains("Issues:"));
 }
 

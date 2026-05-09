@@ -2190,87 +2190,85 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             ndjson_event_schema: ndjson_event_schema.clone(),
         },
         SchemaDocument {
-            data_schema: object_schema(vec![
-                (
-                    "agents",
-                    array_schema(object_schema(vec![
-                        ("displayName", string_schema()),
-                        ("installedVersion", string_schema()),
-                        ("latestVersion", string_schema()),
-                        ("lifecycle", string_schema()),
-                        ("outdated", boolean_schema()),
-                        ("sourceLabel", string_schema()),
-                    ])),
-                ),
-                (
-                    "checks",
-                    array_schema(object_schema(vec![
-                        ("name", string_schema()),
-                        ("detail", string_schema()),
-                        ("recoveryHint", string_schema()),
-                        ("status", string_schema()),
-                    ])),
-                ),
-                (
-                    "installSource",
-                    object_schema(vec![
-                        ("kind", string_schema()),
-                        ("confidence", string_schema()),
-                        ("executable", string_schema()),
-                        ("recorded", string_schema()),
-                    ]),
-                ),
-                (
-                    "installers",
-                    object_schema(vec![
-                        ("brew", boolean_schema()),
-                        ("bun", boolean_schema()),
-                        ("npm", boolean_schema()),
-                        ("winget", boolean_schema()),
-                    ]),
-                ),
-                (
-                    "issues",
-                    array_schema(object_schema(vec![
-                        ("blocking", boolean_schema()),
-                        ("category", string_schema()),
-                        ("code", string_schema()),
-                        ("docsRef", string_schema()),
-                        ("message", string_schema()),
-                        ("severity", string_schema()),
-                        (
-                            "subject",
-                            object_schema(vec![
-                                ("kind", string_schema()),
-                                ("name", string_schema()),
-                            ]),
+            data_schema: object_schema_with_required(
+                vec!["agents", "installers", "issues", "self"],
+                vec![
+                    (
+                        "agents",
+                        array_schema(object_schema_with_required(
+                            vec!["displayName", "lifecycle", "outdated", "sourceLabel"],
+                            vec![
+                                ("displayName", string_schema()),
+                                ("installedVersion", string_schema()),
+                                ("latestVersion", string_schema()),
+                                ("lifecycle", string_schema()),
+                                ("outdated", boolean_schema()),
+                                ("sourceLabel", string_schema()),
+                            ],
+                        )),
+                    ),
+                    (
+                        "installers",
+                        object_schema(vec![
+                            ("brew", boolean_schema()),
+                            ("bun", boolean_schema()),
+                            ("npm", boolean_schema()),
+                            ("winget", boolean_schema()),
+                        ]),
+                    ),
+                    (
+                        "issues",
+                        array_schema(object_schema_with_required(
+                            vec![
+                                "blocking",
+                                "category",
+                                "code",
+                                "message",
+                                "severity",
+                                "subject",
+                                "suggestedAction",
+                                "suggestedCommands",
+                            ],
+                            vec![
+                                ("blocking", boolean_schema()),
+                                ("category", string_schema()),
+                                ("code", string_schema()),
+                                ("docsRef", string_schema()),
+                                ("message", string_schema()),
+                                ("severity", string_schema()),
+                                (
+                                    "subject",
+                                    object_schema_with_required(
+                                        vec!["kind"],
+                                        vec![("kind", string_schema()), ("name", string_schema())],
+                                    ),
+                                ),
+                                ("suggestedAction", string_schema()),
+                                ("suggestedCommands", array_schema(string_schema())),
+                            ],
+                        )),
+                    ),
+                    (
+                        "self",
+                        object_schema_with_required(
+                            vec![
+                                "canAutoUpdate",
+                                "currentVersion",
+                                "installSource",
+                                "outdated",
+                            ],
+                            vec![
+                                ("canAutoUpdate", boolean_schema()),
+                                ("currentVersion", string_schema()),
+                                ("installSource", string_schema()),
+                                ("latestVersion", string_schema()),
+                                ("outdated", boolean_schema()),
+                                ("recoveryHint", string_schema()),
+                            ],
                         ),
-                        ("suggestedAction", string_schema()),
-                        ("suggestedCommands", array_schema(string_schema())),
-                    ])),
-                ),
-                ("ok", boolean_schema()),
-                (
-                    "paths",
-                    object_schema(vec![
-                        ("configFile", string_schema()),
-                        ("executable", string_schema()),
-                        ("stateFile", string_schema()),
-                    ]),
-                ),
-                (
-                    "self",
-                    object_schema(vec![
-                        ("canAutoUpdate", boolean_schema()),
-                        ("currentVersion", string_schema()),
-                        ("installSource", string_schema()),
-                        ("latestVersion", string_schema()),
-                        ("outdated", boolean_schema()),
-                        ("recoveryHint", string_schema()),
-                    ]),
-                ),
-                ("summary", string_schema()),
-            ]),
+                    ),
+                ],
+            ),
             description: "AGX runtime diagnostics",
             envelope_schema: envelope_schema.clone(),
             name: "doctor",

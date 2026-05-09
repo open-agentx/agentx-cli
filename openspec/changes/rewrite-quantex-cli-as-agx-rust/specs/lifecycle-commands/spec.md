@@ -174,9 +174,16 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 #### Scenario: Doctor reports manual update guidance for unmanaged PATH agents
 
 - GIVEN an agent is visible in PATH but not tracked as a managed install
+- AND AGX knows that the unmanaged install is behind the latest available version
 - WHEN the user runs `agx doctor`
 - THEN AGX reports an agent remediation issue
 - AND includes manual update guidance even when the agent has no self-update command
+
+#### Scenario: Doctor structured output stays within the stable contract
+
+- WHEN the user runs `agx doctor --json`
+- THEN the structured result data includes only `agents`, `installers`, `issues`, and `self`
+- AND AGX does not expose implementation-specific runtime checks, path snapshots, or aggregate summary booleans in that public payload
 
 #### Scenario: Doctor marks outdated installed agents
 
