@@ -540,7 +540,7 @@ fn render_commands(result: &CommandResult) {
             println!("    {}", command["outputSchemaRef"].as_str().unwrap_or(""));
         }
     }
-    println!("\nRun `agx commands --json` for the stable command catalog.\n");
+    println!();
 }
 
 fn render_schema(result: &CommandResult) {
@@ -556,7 +556,7 @@ fn render_schema(result: &CommandResult) {
             println!("    {}", command["description"].as_str().unwrap_or(""));
         }
     }
-    println!("\nRun `agx schema --json` for structured output schemas.\n");
+    println!();
 }
 
 fn render_config(data: &Value) {
@@ -837,7 +837,9 @@ fn render_info(result: &CommandResult) {
     if let Some(source) = data["inspection"]["sourceLabel"].as_str() {
         println!("  Source:       {source}");
     }
-    if let Some(lifecycle) = data["inspection"]["lifecycle"].as_str() {
+    if data["inspection"]["installed"].as_bool().unwrap_or(false)
+        && let Some(lifecycle) = data["inspection"]["lifecycle"].as_str()
+    {
         println!("  Lifecycle:    {lifecycle}");
     }
     if let Some(version) = data["inspection"]["installedVersion"].as_str() {
@@ -982,7 +984,7 @@ fn render_resolve(result: &CommandResult) {
         println!("{}", error.message);
         if let Some(guidance) = data["resolution"]["installGuidance"].as_object() {
             if let Some(ensure) = guidance["suggestedEnsureCommand"].as_str() {
-                println!("{ensure}");
+                println!("Try: {ensure}");
             }
             if let Some(methods) = guidance["installMethods"].as_array() {
                 for method in methods {
@@ -998,7 +1000,7 @@ fn render_resolve(result: &CommandResult) {
         if let Some(ensure) =
             data["resolution"]["installGuidance"]["suggestedEnsureCommand"].as_str()
         {
-            println!("{ensure}");
+            println!("Try: {ensure}");
         }
         return;
     }

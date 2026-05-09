@@ -122,6 +122,8 @@ fn info_resolves_aliases_to_canonical_agent() {
     let json = stdout_json(&output);
     assert_eq!(json["data"]["agent"]["name"], "qoder");
     assert_eq!(json["data"]["agent"]["displayName"], "Qoder CLI");
+    assert!(json["data"]["inspection"]["updateLabel"].is_null());
+    assert!(json["data"]["inspection"]["sourceLabel"].is_null());
     assert_eq!(
         json["data"]["agent"]["selfUpdateCommands"][0],
         "qodercli update"
@@ -378,7 +380,7 @@ fn resolve_human_output_prints_ensure_guidance_for_missing_agent_binary() {
     assert_eq!(output.status.code(), Some(4));
     let stdout = stdout_text(&output);
     assert!(stdout.contains("Qoder CLI is not installed."));
-    assert!(stdout.contains("agx ensure qoder"));
+    assert!(stdout.contains("Try: agx ensure qoder"));
     assert!(stdout.contains("Install: [bun] bun add -g @qoder-ai/qodercli"));
     assert!(stdout.contains("Install: [npm] npm install -g @qoder-ai/qodercli"));
 }
@@ -459,6 +461,7 @@ fn info_human_output_lists_aliases_and_self_update_commands() {
     assert!(stdout.contains("qodercli"));
     assert!(stdout.contains("Update:"));
     assert!(stdout.contains("qodercli update"));
+    assert!(!stdout.contains("Lifecycle:"));
 }
 
 #[test]

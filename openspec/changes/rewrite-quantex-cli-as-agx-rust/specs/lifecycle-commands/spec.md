@@ -148,6 +148,7 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - THEN AGX reports whether the agent is installed
 - AND includes installed version and launch path data when available
 - AND provides install guidance when the agent is missing
+- AND prefixes the human ensure hint with `Try:`
 
 #### Scenario: Resolve reports untracked PATH installs distinctly
 
@@ -169,7 +170,14 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - WHEN the user runs `agx list`, `agx info <agent>`, `agx inspect <agent>`, or `agx capabilities`
 - THEN AGX renders install method labels as `bun` and `npm` for managed package installs
 - AND `agx list` uses stable column-style human output with status, version, update mode, and source details
+- AND `agx info` omits the lifecycle line when the agent is not installed
 - AND `agx capabilities` renders platform, output modes, agents, installers, and full feature coverage in the stable order
+
+#### Scenario: Info structured output omits inspect-only update labels
+
+- WHEN the user runs `agx info <agent> --json`
+- THEN the `inspection` payload includes install state, lifecycle, and optional source/version/path fields
+- AND does not expose the inspect-only `updateLabel` field
 
 #### Scenario: Doctor reports manual update guidance for unmanaged PATH agents
 

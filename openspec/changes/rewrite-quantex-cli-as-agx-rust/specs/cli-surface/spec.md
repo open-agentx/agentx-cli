@@ -98,3 +98,4 @@ AGX SHALL publish stable command-catalog and schema-catalog metadata for automat
 - WHEN the user runs `agx commands` or `agx schema`
 - THEN AGX renders a readable catalog that includes the command flags and schema references for commands
 - AND the schema catalog shows each schema name with its description
+- AND AGX does not append extra helper footer text that is absent from the stable quantex catalog views

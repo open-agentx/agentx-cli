@@ -35,6 +35,7 @@ fn commands_human_output_shows_flags_and_schema_refs() {
     assert!(stdout.contains("commands"));
     assert!(stdout.contains("[--json, --output, --quiet, --color, --log-level, --timeout]"));
     assert!(stdout.contains("#/commands/commands"));
+    assert!(!stdout.contains("Run `agx commands --json`"));
 }
 
 #[test]
@@ -175,6 +176,7 @@ fn schema_human_output_shows_descriptions_only() {
     assert!(stdout.contains("AGX Schemas"));
     assert!(stdout.contains("commands"));
     assert!(stdout.contains("Stable command catalog"));
+    assert!(!stdout.contains("Run `agx schema --json`"));
 }
 
 #[test]
@@ -683,8 +685,8 @@ fn schema_optional_fields_are_not_misclassified_as_required() {
         .expect("inspection required should be an array");
     assert!(inspection_required.iter().any(|item| item == "installed"));
     assert!(inspection_required.iter().any(|item| item == "lifecycle"));
-    assert!(inspection_required.iter().any(|item| item == "sourceLabel"));
-    assert!(inspection_required.iter().any(|item| item == "updateLabel"));
+    assert!(!inspection_required.iter().any(|item| item == "sourceLabel"));
+    assert!(!inspection_required.iter().any(|item| item == "updateLabel"));
     assert!(!inspection_required.iter().any(|item| item == "binaryPath"));
     assert!(
         !inspection_required
@@ -695,6 +697,19 @@ fn schema_optional_fields_are_not_misclassified_as_required() {
         !inspection_required
             .iter()
             .any(|item| item == "latestVersion")
+    );
+    let inspection_properties = inspection["schema"]["properties"]
+        .as_array()
+        .expect("inspection properties should be an array");
+    assert!(
+        inspection_properties
+            .iter()
+            .any(|item| item["name"] == "sourceLabel")
+    );
+    assert!(
+        !inspection_properties
+            .iter()
+            .any(|item| item["name"] == "updateLabel")
     );
 }
 
@@ -829,5 +844,5 @@ fn human_commands_output_stays_readable() {
     assert!(output.status.success());
     let stdout = stdout_text(&output);
     assert!(stdout.contains("AGX Commands"));
-    assert!(stdout.contains("agx commands --json"));
+    assert!(!stdout.contains("agx commands --json"));
 }

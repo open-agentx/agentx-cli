@@ -200,9 +200,24 @@ struct ListedAgent {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct InfoInspection {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    binary_path: Option<String>,
+    installed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    installed_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_version: Option<String>,
+    lifecycle: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_label: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct InfoData {
     agent: AgentInfo,
-    inspection: inspection::AgentInspection,
+    inspection: InfoInspection,
 }
 
 #[derive(Debug, Serialize)]
@@ -1440,12 +1455,25 @@ fn info_command(agent_name: &str, context: &CliContext) -> CommandResult {
     let Some(agent) = agents::resolve_agent(agent_name) else {
         return agent_not_found_result("info", agent_name, context);
     };
+    let inspection = resolved_agent_inspection(agent, context);
+    let installed = inspection.installed;
 
     CommandResult::success(
         "info",
         InfoData {
             agent: agent_info(agent),
-            inspection: resolved_agent_inspection(agent, context),
+            inspection: InfoInspection {
+                binary_path: inspection.binary_path,
+                installed,
+                installed_version: inspection.installed_version,
+                latest_version: inspection.latest_version,
+                lifecycle: inspection.lifecycle,
+                source_label: if installed {
+                    Some(inspection.source_label)
+                } else {
+                    None
+                },
+            },
         },
         CommandTarget::agent(agent.name),
         context,
@@ -2304,7 +2332,7 @@ fn schema_catalog() -> Vec<SchemaDocument> {
         SchemaDocument {
             data_schema: object_schema(vec![
                 ("agent", agent_info_schema()),
-                ("inspection", agent_inspection_schema()),
+                ("inspection", agent_info_inspection_schema()),
             ]),
             description: "Agent details",
             envelope_schema: envelope_schema.clone(),
@@ -2577,6 +2605,20 @@ fn agent_inspection_schema() -> JsonSchema {
             ("lifecycle", string_schema()),
             ("sourceLabel", string_schema()),
             ("updateLabel", string_schema()),
+        ],
+    )
+}
+
+fn agent_info_inspection_schema() -> JsonSchema {
+    object_schema_with_required(
+        vec!["installed", "lifecycle"],
+        vec![
+            ("binaryPath", string_schema()),
+            ("installed", boolean_schema()),
+            ("installedVersion", string_schema()),
+            ("latestVersion", string_schema()),
+            ("lifecycle", string_schema()),
+            ("sourceLabel", string_schema()),
         ],
     )
 }
