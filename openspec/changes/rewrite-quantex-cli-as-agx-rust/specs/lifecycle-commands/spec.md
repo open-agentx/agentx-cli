@@ -112,6 +112,13 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - THEN AGX reports an agent remediation issue
 - AND includes manual update guidance even when the agent has no self-update command
 
+#### Scenario: Doctor marks outdated installed agents
+
+- GIVEN AGX knows both the installed and latest versions for a tracked agent
+- WHEN the user runs `agx doctor`
+- THEN AGX marks that agent as outdated when the versions differ
+- AND reports the latest version in the installed agents list
+
 ### Requirement: Lifecycle commands MUST support dry-run behavior
 
 AGX SHALL support dry-run planning for lifecycle and execution commands that can mutate state or invoke external installers.

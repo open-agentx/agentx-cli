@@ -376,13 +376,18 @@ fn inspected_agents() -> Vec<DoctorAgent> {
             } else {
                 "detected in PATH"
             };
+            let outdated = inspection
+                .installed_version
+                .as_ref()
+                .zip(inspection.latest_version.as_ref())
+                .is_some_and(|(installed, latest)| installed != latest);
 
             Some(DoctorAgent {
                 display_name: agent.display_name.to_string(),
                 installed_version: inspection.installed_version,
                 latest_version: inspection.latest_version,
                 lifecycle,
-                outdated: false,
+                outdated,
                 source_label,
             })
         })

@@ -367,6 +367,36 @@ fn doctor_human_output_lists_installed_agents_with_versions() {
 }
 
 #[test]
+fn doctor_human_output_marks_outdated_installed_agents() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["doctor"],
+        &[("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "1.0.0")],
+    );
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("update available: 1.0.0"));
+}
+
+#[test]
 fn doctor_human_output_reports_missing_managed_installers() {
     let workspace = TestWorkspace::new();
 

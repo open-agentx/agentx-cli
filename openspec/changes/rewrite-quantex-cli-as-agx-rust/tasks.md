@@ -43,6 +43,7 @@
 - [x] 4.3.1 Close latest `run/exec` parity gaps from `quantex-cli/test/commands/run.test.ts`, including unknown-agent handling, shortcut cancellation/launch failure exit codes, and explicit `--install if-missing` non-interactive execution coverage.
 - [x] 4.3.2 Close latest `resolve` parity gaps from `quantex-cli/test/commands/resolve.test.ts`, including missing-agent install guidance details, installed-version reporting, and human-readable launch metadata.
 - [x] 4.3.3 Close latest `doctor` parity gaps from `quantex-cli/test/commands/doctor.test.ts`, including manual-update guidance for unmanaged PATH agents without a self-update command.
+- [x] 4.3.4 Close latest `doctor` outdated-agent parity gaps from `quantex-cli/test/commands/doctor.test.ts`, including outdated markers for installed agent listings.
 - [x] 4.4 Add AGX agent workflow bootstrap, OpenSpec README/config, and project-memory spec.
 - [x] 4.5 Add task-start and worktree runbooks.
 - [x] 4.6 Add Rust workspace architecture ADR.
