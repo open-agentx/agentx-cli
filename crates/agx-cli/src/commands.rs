@@ -629,26 +629,42 @@ fn install_command(agent_names: &[String], context: &CliContext) -> CommandResul
     );
 
     let mut results = Vec::new();
-    for agent_name in agent_names {
-        let result = lifecycle_command_with_started(
-            "install",
-            agent_name,
-            context,
-            package_manager::install_agent,
-            false,
-        );
-        let batch_result = lifecycle_batch_result_item(agent_name, &result);
-        let target_name = batch_result.agent.name.clone();
+    match crate::lock::acquire_resource_lock("agent lifecycle") {
+        Ok(_lock_guard) => {
+            for agent_name in agent_names {
+                let result = lifecycle_command_with_started(
+                    "install",
+                    agent_name,
+                    context,
+                    package_manager::install_agent,
+                    false,
+                );
+                let batch_result = lifecycle_batch_result_item(agent_name, &result);
+                let target_name = batch_result.agent.name.clone();
 
-        let _ = crate::output::emit_ndjson_event(
-            "install",
-            "progress",
-            &batch_result,
-            Some(CommandTarget::agent(target_name)),
-            context,
-        );
+                let _ = crate::output::emit_ndjson_event(
+                    "install",
+                    "progress",
+                    &batch_result,
+                    Some(CommandTarget::agent(target_name)),
+                    context,
+                );
 
-        results.push(batch_result);
+                results.push(batch_result);
+            }
+        }
+        Err(error) => {
+            let result = CommandResult::error(
+                "install",
+                error,
+                CommandTarget {
+                    kind: crate::output::TargetKind::Agent,
+                    name: None,
+                },
+                context,
+            );
+            results.push(lifecycle_batch_result_item("batch", &result));
+        }
     }
 
     let summary = summarize_lifecycle_batch_results(&results);
@@ -851,143 +867,181 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
             context,
         );
         let mut results = Vec::new();
-        let mut grouped_updates: BTreeMap<String, Vec<PendingGroupedUpdate>> = BTreeMap::new();
-        for agent in agents::all_agents() {
-            let inspection = resolved_agent_inspection(*agent, context);
-            let installed_state = crate::state::get_installed_agent_state(agent.name);
+        match crate::lock::acquire_resource_lock("agent lifecycle") {
+            Ok(_lock_guard) => {
+                let mut grouped_updates: BTreeMap<String, Vec<PendingGroupedUpdate>> =
+                    BTreeMap::new();
+                for agent in agents::all_agents() {
+                    let inspection = resolved_agent_inspection(*agent, context);
+                    let installed_state = crate::state::get_installed_agent_state(agent.name);
 
-            if !inspection.installed && installed_state.is_none() {
-                continue;
+                    if !inspection.installed && installed_state.is_none() {
+                        continue;
+                    }
+
+                    if inspection.installed && installed_state.is_none() {
+                        let result = package_manager::UpdateResult {
+                            display_name: agent.display_name.to_string(),
+                            hint: Some(format!(
+                                "Use `agx inspect {} --json` to confirm the source, then reinstall through AGX if you want `agx update --all` to manage it.",
+                                agent.name
+                            )),
+                            installed_version: inspection.installed_version,
+                            latest_version: inspection.latest_version,
+                            name: agent.name.to_string(),
+                            message: Some(format!(
+                                "{} is detected in PATH but not tracked as an AGX-managed install.",
+                                agent.display_name
+                            )),
+                            resource: None,
+                            status: "manual-required",
+                            strategy: Some("manual-hint".to_string()),
+                        };
+                        push_update_result(&mut results, result, context);
+                        continue;
+                    }
+
+                    if inspection.installed_version.is_some()
+                        && inspection.installed_version == inspection.latest_version
+                    {
+                        let result = package_manager::UpdateResult {
+                            display_name: agent.display_name.to_string(),
+                            hint: None,
+                            installed_version: inspection.installed_version,
+                            latest_version: inspection.latest_version,
+                            name: agent.name.to_string(),
+                            message: None,
+                            resource: None,
+                            status: "up-to-date",
+                            strategy: Some(inspection.update_label.clone()),
+                        };
+                        push_update_result(&mut results, result, context);
+                        continue;
+                    }
+
+                    if inspection.latest_version.is_none()
+                        && agent.npm_package.is_none()
+                        && agents::self_update_commands(*agent).is_empty()
+                    {
+                        let result = package_manager::UpdateResult {
+                            display_name: agent.display_name.to_string(),
+                            hint: Some(format!(
+                                "Check {} for the recommended update path.",
+                                agent.homepage
+                            )),
+                            installed_version: inspection.installed_version,
+                            latest_version: inspection.latest_version,
+                            name: agent.name.to_string(),
+                            message: Some(format!(
+                                "{} uses a manually managed install source. Please check for updates manually.",
+                                agent.display_name
+                            )),
+                            resource: None,
+                            status: "manual-required",
+                            strategy: Some("manual-hint".to_string()),
+                        };
+                        push_update_result(&mut results, result, context);
+                        continue;
+                    }
+
+                    if let Some(installed_state) = installed_state.as_ref()
+                        && matches!(installed_state.install_type.as_str(), "bun" | "npm")
+                        && installed_state.package_name.is_some()
+                    {
+                        grouped_updates
+                            .entry(installed_state.install_type.clone())
+                            .or_default()
+                            .push(PendingGroupedUpdate {
+                                agent: *agent,
+                                installed_state: installed_state.clone(),
+                                installed_version: inspection.installed_version.clone(),
+                                latest_version: inspection.latest_version.clone(),
+                            });
+                        continue;
+                    }
+
+                    let result = perform_update(
+                        *agent,
+                        installed_state.as_ref(),
+                        inspection.installed_version.as_deref(),
+                        inspection.latest_version.as_deref(),
+                        context,
+                        Some(inspection.update_label.clone()),
+                    );
+                    push_update_result(&mut results, result, context);
+                }
+
+                for bucket in grouped_updates.into_values() {
+                    for result in perform_grouped_updates(bucket, context) {
+                        push_update_result(&mut results, result, context);
+                    }
+                }
+
+                for installed_state in crate::state::load_state().installed_agents.into_values() {
+                    if agents::resolve_agent(&installed_state.agent_name).is_none() {
+                        let result = package_manager::UpdateResult {
+                            display_name: installed_state.agent_name.clone(),
+                            hint: None,
+                            installed_version: None,
+                            latest_version: None,
+                            name: installed_state.agent_name.clone(),
+                            message: Some(
+                                "Tracked agent is no longer in the AGX catalog.".to_string(),
+                            ),
+                            resource: None,
+                            status: "manual-required",
+                            strategy: None,
+                        };
+                        push_update_result(&mut results, result, context);
+                    }
+                }
             }
-
-            if inspection.installed && installed_state.is_none() {
-                let result = package_manager::UpdateResult {
-                    display_name: agent.display_name.to_string(),
-                    hint: Some(format!(
-                        "Use `agx inspect {} --json` to confirm the source, then reinstall through AGX if you want `agx update --all` to manage it.",
-                        agent.name
-                    )),
-                    installed_version: inspection.installed_version,
-                    latest_version: inspection.latest_version,
-                    name: agent.name.to_string(),
-                    message: Some(format!(
-                        "{} is detected in PATH but not tracked as an AGX-managed install.",
-                        agent.display_name
-                    )),
-                    resource: None,
-                    status: "manual-required",
-                    strategy: Some("manual-hint".to_string()),
-                };
-                push_update_result(&mut results, result, context);
-                continue;
-            }
-
-            if inspection.installed_version.is_some()
-                && inspection.installed_version == inspection.latest_version
-            {
-                let result = package_manager::UpdateResult {
-                    display_name: agent.display_name.to_string(),
-                    hint: None,
-                    installed_version: inspection.installed_version,
-                    latest_version: inspection.latest_version,
-                    name: agent.name.to_string(),
-                    message: None,
-                    resource: None,
-                    status: "up-to-date",
-                    strategy: Some(inspection.update_label.clone()),
-                };
-                push_update_result(&mut results, result, context);
-                continue;
-            }
-
-            if inspection.latest_version.is_none()
-                && agent.npm_package.is_none()
-                && agents::self_update_commands(*agent).is_empty()
-            {
-                let result = package_manager::UpdateResult {
-                    display_name: agent.display_name.to_string(),
-                    hint: Some(format!(
-                        "Check {} for the recommended update path.",
-                        agent.homepage
-                    )),
-                    installed_version: inspection.installed_version,
-                    latest_version: inspection.latest_version,
-                    name: agent.name.to_string(),
-                    message: Some(format!(
-                        "{} uses a manually managed install source. Please check for updates manually.",
-                        agent.display_name
-                    )),
-                    resource: None,
-                    status: "manual-required",
-                    strategy: Some("manual-hint".to_string()),
-                };
-                push_update_result(&mut results, result, context);
-                continue;
-            }
-
-            if let Some(installed_state) = installed_state.as_ref()
-                && matches!(installed_state.install_type.as_str(), "bun" | "npm")
-                && installed_state.package_name.is_some()
-            {
-                grouped_updates
-                    .entry(installed_state.install_type.clone())
-                    .or_default()
-                    .push(PendingGroupedUpdate {
-                        agent: *agent,
-                        installed_state: installed_state.clone(),
-                        installed_version: inspection.installed_version.clone(),
-                        latest_version: inspection.latest_version.clone(),
-                    });
-                continue;
-            }
-
-            let result = perform_update(
-                *agent,
-                installed_state.as_ref(),
-                inspection.installed_version.as_deref(),
-                inspection.latest_version.as_deref(),
-                context,
-                Some(inspection.update_label.clone()),
-            );
-            push_update_result(&mut results, result, context);
-        }
-
-        for bucket in grouped_updates.into_values() {
-            for result in perform_grouped_updates(bucket, context) {
-                push_update_result(&mut results, result, context);
-            }
-        }
-
-        for installed_state in crate::state::load_state().installed_agents.into_values() {
-            if agents::resolve_agent(&installed_state.agent_name).is_none() {
-                let result = package_manager::UpdateResult {
-                    display_name: installed_state.agent_name.clone(),
-                    hint: None,
-                    installed_version: None,
-                    latest_version: None,
-                    name: installed_state.agent_name.clone(),
-                    message: Some("Tracked agent is no longer in the AGX catalog.".to_string()),
-                    resource: None,
-                    status: "manual-required",
-                    strategy: None,
-                };
-                push_update_result(&mut results, result, context);
+            Err(error) => {
+                push_update_result(
+                    &mut results,
+                    package_manager::UpdateResult {
+                        display_name: "AGX agent lifecycle".to_string(),
+                        hint: None,
+                        installed_version: None,
+                        latest_version: None,
+                        name: "all".to_string(),
+                        message: Some(error.message),
+                        resource: None,
+                        status: "locked",
+                        strategy: None,
+                    },
+                    context,
+                );
             }
         }
 
         let has_failures = results
             .iter()
             .any(|result| matches!(result.status, "failed" | "locked"));
+        let has_only_locks = has_failures
+            && results
+                .iter()
+                .filter(|result| matches!(result.status, "failed" | "locked"))
+                .all(|result| result.status == "locked");
         let data = UpdateData {
             results,
             scope: "all",
         };
         if has_failures {
-            return CommandResult::error(
+            return CommandResult::error_with_data(
                 "update",
+                data,
                 AgxError::new(
-                    AgxErrorCode::UpdateFailed,
-                    "One or more agents failed to update.",
+                    if has_only_locks {
+                        AgxErrorCode::ResourceLocked
+                    } else {
+                        AgxErrorCode::UpdateFailed
+                    },
+                    if has_only_locks {
+                        "Another AGX process already holds the agent lifecycle lock."
+                    } else {
+                        "One or more agents failed to update."
+                    },
                 ),
                 CommandTarget::agent("all"),
                 context,
@@ -1060,13 +1114,15 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
         );
     }
 
-    match package_manager::update_agent(
-        agent,
-        installed_state.as_ref(),
-        inspection.installed_version.clone(),
-        inspection.latest_version.clone(),
-        context,
-    ) {
+    match crate::lock::with_resource_lock("agent lifecycle", || {
+        package_manager::update_agent(
+            agent,
+            installed_state.as_ref(),
+            inspection.installed_version.clone(),
+            inspection.latest_version.clone(),
+            context,
+        )
+    }) {
         Ok(result) if matches!(result.status, "failed" | "locked") => {
             CommandResult::error_with_data(
                 "update",
@@ -1089,6 +1145,30 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                 context,
             )
         }
+        Err(error) => CommandResult::error_with_data(
+            "update",
+            UpdateData {
+                results: vec![package_manager::UpdateResult {
+                    display_name: agent.display_name.to_string(),
+                    hint: None,
+                    installed_version: inspection.installed_version.clone(),
+                    latest_version: inspection.latest_version.clone(),
+                    name: agent.name.to_string(),
+                    message: Some(error.message.clone()),
+                    resource: None,
+                    status: if matches!(error.code, AgxErrorCode::ResourceLocked) {
+                        "locked"
+                    } else {
+                        "failed"
+                    },
+                    strategy: Some(inspection.update_label.clone()),
+                }],
+                scope: "single",
+            },
+            error,
+            CommandTarget::agent(agent.name),
+            context,
+        ),
         Ok(result) => CommandResult::success(
             "update",
             UpdateData {
@@ -1106,9 +1186,6 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
             CommandTarget::agent(agent.name),
             context,
         ),
-        Err(error) => {
-            CommandResult::error("update", error, CommandTarget::agent(agent.name), context)
-        }
     }
 }
 
@@ -1422,7 +1499,13 @@ fn lifecycle_command_with_started(
         );
     }
 
-    match operation(agent, context) {
+    let result = if emit_started {
+        crate::lock::with_resource_lock("agent lifecycle", || operation(agent, context))
+    } else {
+        operation(agent, context)
+    };
+
+    match result {
         Ok(result) => {
             let mut command_result = CommandResult::success(
                 action,

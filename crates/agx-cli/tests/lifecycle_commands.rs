@@ -275,6 +275,45 @@ fn install_multiple_agents_human_output_includes_summary() {
 }
 
 #[test]
+fn install_returns_install_failed_when_external_install_command_fails() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "install", "qoder"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "INSTALL_FAILED");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("Failed to run `bun add -g @qoder-ai/qodercli`")
+    );
+}
+
+#[test]
+fn install_returns_resource_locked_when_lifecycle_lock_is_held() {
+    let workspace = TestWorkspace::new();
+    fs::create_dir_all(workspace.config_dir()).expect("config dir should exist");
+    fs::write(
+        workspace.config_dir().join("agent-lifecycle.lock"),
+        b"locked\n",
+    )
+    .expect("lock file should be written");
+
+    let output = run_agx(&workspace, &["--json", "install", "qoder"]);
+
+    assert_eq!(output.status.code(), Some(9));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "RESOURCE_LOCKED");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("agent lifecycle")
+    );
+}
+
+#[test]
 fn ensure_reports_already_installed_when_binary_exists() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
@@ -560,6 +599,74 @@ fn uninstall_requires_manual_action_when_tracked_package_is_missing() {
             .as_str()
             .expect("message should exist")
             .contains("does not have a managed package recorded")
+    );
+}
+
+#[test]
+fn uninstall_returns_uninstall_failed_when_external_command_fails() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx(&workspace, &["--json", "uninstall", "qoder"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "UNINSTALL_FAILED");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("Failed to run `npm uninstall -g @qoder-ai/qodercli`")
+    );
+}
+
+#[test]
+fn uninstall_returns_resource_locked_when_lifecycle_lock_is_held() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+    fs::create_dir_all(workspace.config_dir()).expect("config dir should exist");
+    fs::write(
+        workspace.config_dir().join("agent-lifecycle.lock"),
+        b"locked\n",
+    )
+    .expect("lock file should be written");
+
+    let output = run_agx(&workspace, &["--json", "uninstall", "qoder"]);
+
+    assert_eq!(output.status.code(), Some(9));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "RESOURCE_LOCKED");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("agent lifecycle")
     );
 }
 
@@ -1239,5 +1346,77 @@ fn update_single_self_update_failure_returns_hint() {
             .as_str()
             .expect("hint should exist")
             .contains("Try running qodercli update directly")
+    );
+}
+
+#[test]
+fn update_single_returns_resource_locked_when_lifecycle_lock_is_held() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+    fs::create_dir_all(workspace.config_dir()).expect("config dir should exist");
+    fs::write(
+        workspace.config_dir().join("agent-lifecycle.lock"),
+        b"locked\n",
+    )
+    .expect("lock file should be written");
+
+    let output = run_agx(&workspace, &["--json", "update", "qoder"]);
+
+    assert_eq!(output.status.code(), Some(9));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "RESOURCE_LOCKED");
+    assert_eq!(json["data"]["results"][0]["status"], "locked");
+}
+
+#[test]
+fn update_all_returns_resource_locked_when_lifecycle_lock_is_held() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "npm",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+    fs::create_dir_all(workspace.config_dir()).expect("config dir should exist");
+    fs::write(
+        workspace.config_dir().join("agent-lifecycle.lock"),
+        b"locked\n",
+    )
+    .expect("lock file should be written");
+
+    let output = run_agx(&workspace, &["--json", "update", "--all"]);
+
+    assert_eq!(output.status.code(), Some(9));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "RESOURCE_LOCKED");
+    assert_eq!(json["data"]["results"][0]["status"], "locked");
+    assert!(
+        json["data"]["results"][0]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("agent lifecycle")
     );
 }

@@ -18,6 +18,12 @@ AGX SHALL expose managed lifecycle commands for supported agents.
 - AND returns a structured lifecycle result
 - AND uses compatible state records for managed installs
 
+#### Scenario: Another process already holds the agent lifecycle lock
+
+- GIVEN another AGX process is already mutating agent lifecycle state
+- WHEN the user runs `agx install`, `agx ensure`, `agx uninstall`, or `agx update`
+- THEN AGX fails with a resource-locked result instead of running the lifecycle operation concurrently
+
 #### Scenario: User installs multiple agents in one command
 
 - GIVEN multiple requested agents exist in the AGX catalog
