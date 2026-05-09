@@ -64,6 +64,14 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - AND forwards arguments to the agent process
 - AND returns a structured execution result
 
+#### Scenario: Explicit execution defaults to install confirmation
+
+- GIVEN the requested agent is not installed
+- WHEN the user runs `agx exec <agent> -- <args>` without an explicit `--install` policy
+- THEN AGX treats the request as install-on-prompt behavior
+- AND asks for confirmation in interactive sessions before installing
+- AND returns `INTERACTION_REQUIRED` in non-interactive sessions unless another install policy was provided
+
 #### Scenario: Human execution preserves interactive agent stdio
 
 - WHEN the user runs `agx exec <agent> -- <args>` or `agx <agent> <args>` in human output mode

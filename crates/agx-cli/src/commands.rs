@@ -2800,6 +2800,7 @@ fn exec_missing_result(
                 dry_run: false,
                 exit_code: None,
                 install_policy: match install_policy {
+                    crate::cli::InstallPolicyArg::Prompt => "prompt",
                     crate::cli::InstallPolicyArg::Never => "never",
                     crate::cli::InstallPolicyArg::IfMissing => "if-missing",
                     crate::cli::InstallPolicyArg::Always => "always",

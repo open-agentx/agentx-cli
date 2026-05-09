@@ -64,6 +64,7 @@ pub struct ExecInstallMethod {
     pub method_type: &'static str,
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn execute_agent(
     agent: AgentDefinition,
     args: &[String],
@@ -71,9 +72,15 @@ pub fn execute_agent(
     context: &CliContext,
 ) -> Result<ExecResult, AgxError> {
     let installed_before = inspection::find_binary_in_path(agent.binary_name).is_some();
+    let should_prompt_install =
+        !installed_before && matches!(install_policy, InstallPolicyArg::Prompt);
 
     if context.dry_run {
-        let needs_install = !installed_before || matches!(install_policy, InstallPolicyArg::Always);
+        let needs_install = !installed_before
+            || matches!(
+                install_policy,
+                InstallPolicyArg::Always | InstallPolicyArg::Prompt
+            );
         let command = build_display_command(agent.binary_name, args);
         return Ok(ExecResult {
             agent: exec_agent(agent),
@@ -102,8 +109,31 @@ pub fn execute_agent(
         });
     }
 
+    if should_prompt_install {
+        if !context.interactive && !context.assume_yes {
+            return Err(AgxError::new(
+                AgxErrorCode::InteractionRequired,
+                format!(
+                    "{} is not installed and interactive installation is disabled.",
+                    agent.display_name
+                ),
+            ));
+        }
+
+        if context.interactive && !context.assume_yes && !confirm_exec_install(agent)? {
+            return Err(AgxError::new(
+                AgxErrorCode::Cancelled,
+                format!("Installation cancelled for {}.", agent.display_name),
+            ));
+        }
+    }
+
     if matches!(install_policy, InstallPolicyArg::Always)
-        || (!installed_before && matches!(install_policy, InstallPolicyArg::IfMissing))
+        || (!installed_before
+            && matches!(
+                install_policy,
+                InstallPolicyArg::IfMissing | InstallPolicyArg::Prompt
+            ))
     {
         package_manager::ensure_agent(agent, context).map_err(|error| {
             if matches!(error.code, AgxErrorCode::InstallFailed) {
@@ -346,6 +376,7 @@ fn exec_agent(agent: AgentDefinition) -> ExecAgent {
 
 fn install_policy_label(install_policy: InstallPolicyArg) -> &'static str {
     match install_policy {
+        InstallPolicyArg::Prompt => "prompt",
         InstallPolicyArg::Never => "never",
         InstallPolicyArg::IfMissing => "if-missing",
         InstallPolicyArg::Always => "always",
@@ -364,6 +395,29 @@ fn non_empty_output(output: String) -> Option<String> {
     } else {
         Some(output)
     }
+}
+
+fn confirm_exec_install(agent: AgentDefinition) -> Result<bool, AgxError> {
+    eprintln!(
+        "{} is not installed. Install it now? [y/N]",
+        agent.display_name
+    );
+
+    if let Ok(answer) = std::env::var("AGX_TEST_PROMPT_RESPONSE") {
+        return Ok(matches!(
+            answer.trim().to_ascii_lowercase().as_str(),
+            "y" | "yes"
+        ));
+    }
+
+    let mut input = String::new();
+    std::io::stdin()
+        .read_line(&mut input)
+        .map_err(|error| AgxError::new(AgxErrorCode::Cancelled, error.to_string()))?;
+    Ok(matches!(
+        input.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }
 
 pub fn install_guidance(agent: AgentDefinition, args: &[String]) -> ExecInstallGuidance {
