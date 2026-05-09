@@ -416,10 +416,26 @@ fn render_commands(result: &CommandResult) {
     if let Some(commands) = data["commands"].as_array() {
         for command in commands {
             println!(
-                "  {:<12} {}",
+                "  {}{}",
                 command["name"].as_str().unwrap_or("unknown"),
-                command["summary"].as_str().unwrap_or("")
+                command["flags"]
+                    .as_array()
+                    .map(|flags| {
+                        let joined = flags
+                            .iter()
+                            .filter_map(|flag| flag.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        if joined.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" [{joined}]")
+                        }
+                    })
+                    .unwrap_or_default()
             );
+            println!("    {}", command["summary"].as_str().unwrap_or(""));
+            println!("    {}", command["outputSchemaRef"].as_str().unwrap_or(""));
         }
     }
     println!("\nRun `agx commands --json` for the stable command catalog.\n");
@@ -434,11 +450,8 @@ fn render_schema(result: &CommandResult) {
     println!("AGX Schemas\n");
     if let Some(commands) = data["commands"].as_array() {
         for command in commands {
-            println!(
-                "  {:<12} {}",
-                command["name"].as_str().unwrap_or("unknown"),
-                command["description"].as_str().unwrap_or("")
-            );
+            println!("  {}", command["name"].as_str().unwrap_or("unknown"),);
+            println!("    {}", command["description"].as_str().unwrap_or(""));
         }
     }
     println!("\nRun `agx schema --json` for structured output schemas.\n");

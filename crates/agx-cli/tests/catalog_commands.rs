@@ -25,6 +25,19 @@ fn commands_json_includes_core_lifecycle_commands() {
 }
 
 #[test]
+fn commands_human_output_shows_flags_and_schema_refs() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["commands"]);
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("AGX Commands"));
+    assert!(stdout.contains("commands"));
+    assert!(stdout.contains("[--json, --output, --quiet, --color, --log-level, --timeout]"));
+    assert!(stdout.contains("#/commands/commands"));
+}
+
+#[test]
 fn commands_json_describes_install_and_inspect_flags() {
     let workspace = TestWorkspace::new();
     let output = run_agx(&workspace, &["--json", "commands"]);
@@ -105,6 +118,18 @@ fn commands_json_includes_schema_refs_and_stability() {
             .iter()
             .any(|flag| flag == "--check")
     );
+}
+
+#[test]
+fn schema_human_output_shows_descriptions_only() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["schema"]);
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("AGX Schemas"));
+    assert!(stdout.contains("commands"));
+    assert!(stdout.contains("Stable command catalog"));
 }
 
 #[test]
