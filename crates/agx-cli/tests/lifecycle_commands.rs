@@ -1484,7 +1484,19 @@ fn update_single_returns_resource_locked_when_lifecycle_lock_is_held() {
     assert_eq!(output.status.code(), Some(9));
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "RESOURCE_LOCKED");
+    assert!(
+        json["error"]["details"]["resource"]
+            .as_str()
+            .expect("resource should exist")
+            .contains("agent-lifecycle.lock")
+    );
     assert_eq!(json["data"]["results"][0]["status"], "locked");
+    assert!(
+        json["data"]["results"][0]["resource"]
+            .as_str()
+            .expect("resource should exist")
+            .contains("agent-lifecycle.lock")
+    );
 }
 
 #[test]
@@ -1518,6 +1530,12 @@ fn update_all_returns_resource_locked_when_lifecycle_lock_is_held() {
     let json = stdout_json(&output);
     assert_eq!(json["error"]["code"], "RESOURCE_LOCKED");
     assert_eq!(json["data"]["results"][0]["status"], "locked");
+    assert!(
+        json["data"]["results"][0]["resource"]
+            .as_str()
+            .expect("resource should exist")
+            .contains("agent-lifecycle.lock")
+    );
     assert!(
         json["data"]["results"][0]["message"]
             .as_str()

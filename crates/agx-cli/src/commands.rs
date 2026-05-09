@@ -925,6 +925,9 @@ fn upgrade_error_details(error: &AgxError) -> serde_json::Value {
 #[allow(clippy::too_many_lines)]
 fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> CommandResult {
     if all {
+        let lifecycle_lock_resource = crate::lock::resource_lock_path("agent lifecycle")
+            .to_string_lossy()
+            .into_owned();
         let _ = crate::output::emit_ndjson_event(
             "update",
             "started",
@@ -1072,7 +1075,7 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                         latest_version: None,
                         name: "all".to_string(),
                         message: Some(error.message),
-                        resource: None,
+                        resource: Some(lifecycle_lock_resource),
                         status: "locked",
                         strategy: None,
                     },
@@ -1142,6 +1145,9 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
 
     let inspection = resolved_agent_inspection(agent, context);
     let installed_state = crate::state::get_installed_agent_state(agent.name);
+    let lifecycle_lock_resource = crate::lock::resource_lock_path("agent lifecycle")
+        .to_string_lossy()
+        .into_owned();
     if !inspection.installed && installed_state.is_none() {
         return CommandResult::error(
             "update",
@@ -1190,7 +1196,17 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
         )
     }) {
         Ok(result) if matches!(result.status, "failed" | "locked") => {
-            CommandResult::error_with_data(
+            let details = if result.status == "locked" {
+                Some(serde_json::json!({
+                    "resource": result
+                        .resource
+                        .as_deref()
+                        .unwrap_or(lifecycle_lock_resource.as_str()),
+                }))
+            } else {
+                None
+            };
+            CommandResult::error_with_data_and_details(
                 "update",
                 UpdateData {
                     results: vec![result.clone()],
@@ -1207,34 +1223,43 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                         .clone()
                         .unwrap_or_else(|| format!("Failed to update {}.", agent.display_name)),
                 ),
+                details,
                 CommandTarget::agent(agent.name),
                 context,
             )
         }
-        Err(error) => CommandResult::error_with_data(
-            "update",
-            UpdateData {
-                results: vec![package_manager::UpdateResult {
-                    display_name: agent.display_name.to_string(),
-                    hint: None,
-                    installed_version: inspection.installed_version.clone(),
-                    latest_version: inspection.latest_version.clone(),
-                    name: agent.name.to_string(),
-                    message: Some(error.message.clone()),
-                    resource: None,
-                    status: if matches!(error.code, AgxErrorCode::ResourceLocked) {
-                        "locked"
-                    } else {
-                        "failed"
-                    },
-                    strategy: Some(inspection.update_label.clone()),
-                }],
-                scope: "single",
-            },
-            error,
-            CommandTarget::agent(agent.name),
-            context,
-        ),
+        Err(error) => {
+            let resource = if matches!(error.code, AgxErrorCode::ResourceLocked) {
+                Some(lifecycle_lock_resource)
+            } else {
+                None
+            };
+            CommandResult::error_with_data_and_details(
+                "update",
+                UpdateData {
+                    results: vec![package_manager::UpdateResult {
+                        display_name: agent.display_name.to_string(),
+                        hint: None,
+                        installed_version: inspection.installed_version.clone(),
+                        latest_version: inspection.latest_version.clone(),
+                        name: agent.name.to_string(),
+                        message: Some(error.message.clone()),
+                        resource: resource.clone(),
+                        status: if matches!(error.code, AgxErrorCode::ResourceLocked) {
+                            "locked"
+                        } else {
+                            "failed"
+                        },
+                        strategy: Some(inspection.update_label.clone()),
+                    }],
+                    scope: "single",
+                },
+                error,
+                resource.map(|resource| serde_json::json!({ "resource": resource })),
+                CommandTarget::agent(agent.name),
+                context,
+            )
+        }
         Ok(result) => CommandResult::success(
             "update",
             UpdateData {

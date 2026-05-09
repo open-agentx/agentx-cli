@@ -29,6 +29,10 @@ pub fn acquire_resource_lock(resource: &'static str) -> Result<ResourceLock, Agx
     Ok(ResourceLock { path, _file: file })
 }
 
+pub fn resource_lock_path(resource: &str) -> PathBuf {
+    lock_path(resource)
+}
+
 fn acquire_lock_file(resource: &'static str, path: &PathBuf) -> Result<File, AgxError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| {

@@ -50,6 +50,12 @@ AGX SHALL support updating all tracked managed agents.
 - THEN successful human output reports the strategy and version transition before the success message
 - AND failed human output reports the attempted update transition before surfacing the recovery hint
 
+#### Scenario: Update lock conflicts expose machine-readable resource details
+
+- WHEN `agx update <agent>` or `agx update --all` is blocked by an existing lifecycle lock
+- THEN AGX returns `RESOURCE_LOCKED`
+- AND includes the lock resource path in structured update results and error details
+
 #### Scenario: Managed install version metadata is more precise than binary probing
 
 - GIVEN AGX is tracking a managed npm or Bun install for an agent
