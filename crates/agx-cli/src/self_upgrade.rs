@@ -576,7 +576,7 @@ fn resolve_latest_version_for(
 }
 
 fn resolve_latest_version(channel: SelfUpdateChannel, context: &CliContext) -> Option<String> {
-    if let Ok(version) = std::env::var("AGX_TEST_LATEST_VERSION") {
+    if let Some(version) = non_empty_env("AGX_TEST_LATEST_VERSION") {
         return Some(version);
     }
 
@@ -594,7 +594,7 @@ fn resolve_upstream_latest_version(
     channel: SelfUpdateChannel,
     context: &CliContext,
 ) -> Option<String> {
-    if let Ok(version) = std::env::var("AGX_TEST_UPSTREAM_LATEST_VERSION") {
+    if let Some(version) = non_empty_env("AGX_TEST_UPSTREAM_LATEST_VERSION") {
         return Some(version);
     }
 
@@ -615,6 +615,13 @@ fn resolve_registry_override() -> Option<String> {
     config::get_config_value("selfUpdateRegistry")
         .as_str()
         .map(|value| value.trim_end_matches('/').to_string())
+}
+
+fn non_empty_env(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn is_version_newer(candidate: &str, current: &str) -> bool {

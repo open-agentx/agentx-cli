@@ -63,4 +63,4 @@ AGX SHALL publish stable command-catalog and schema-catalog metadata for automat
 
 - WHEN the user runs `agx schema <command> --json`
 - THEN AGX returns the requested command schema only
-- AND the schema includes nested fields needed to automate capabilities, config, doctor, exec, info, inspect, resolve, upgrade, and update results
+- AND the schema includes nested fields needed to automate capabilities, config, doctor, exec, info, inspect, install batch results, resolve, upgrade, and update results

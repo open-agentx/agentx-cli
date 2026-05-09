@@ -430,3 +430,20 @@ fn list_reads_cached_latest_version_metadata() {
         .expect("qoder should exist");
     assert_eq!(qoder["latestVersion"], "9.9.9");
 }
+
+#[test]
+fn info_exposes_reasonix_catalog_entry() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "info", "reasonix"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["agent"]["name"], "reasonix");
+    assert_eq!(json["data"]["agent"]["displayName"], "Reasonix");
+    assert_eq!(json["data"]["agent"]["aliases"][0], "deepseek-reasonix");
+    assert_eq!(json["data"]["agent"]["packageName"], "reasonix");
+    assert_eq!(
+        json["data"]["agent"]["selfUpdateCommands"][0],
+        "reasonix update"
+    );
+}

@@ -250,6 +250,25 @@ pub fn update_agents_by_type(install_type: &str, packages: &[String]) -> Result<
     run_external_command(&command, AgxErrorCode::UpdateFailed)
 }
 
+pub fn get_managed_installed_package_version(
+    install_type: &str,
+    package_name: &str,
+) -> Option<String> {
+    let env_key = format!(
+        "AGX_TEST_MANAGED_VERSION_{}",
+        sanitize_env_key(package_name)
+    );
+    if let Ok(version) = std::env::var(env_key) {
+        return Some(version);
+    }
+
+    match install_type {
+        "npm" => get_npm_installed_package_version(package_name),
+        "bun" => get_bun_installed_package_version(package_name),
+        _ => None,
+    }
+}
+
 fn update_managed_agent(
     agent: AgentDefinition,
     installed_state: Option<&InstalledAgentState>,
@@ -677,5 +696,50 @@ fn shell_words(command: &str) -> Vec<String> {
     command
         .split_whitespace()
         .map(ToString::to_string)
+        .collect()
+}
+
+fn get_npm_installed_package_version(package_name: &str) -> Option<String> {
+    let output = Command::new("npm")
+        .args(["list", "-g", "--depth=0", "--json"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    json["dependencies"][package_name]["version"]
+        .as_str()
+        .map(ToString::to_string)
+}
+
+fn get_bun_installed_package_version(package_name: &str) -> Option<String> {
+    let output = Command::new("bun").args(["pm", "-g", "ls"]).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let marker = format!("{package_name}@");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout.lines().find_map(|line| {
+        let token = line.split_whitespace().last()?;
+        token
+            .strip_prefix(&marker)
+            .filter(|version| !version.is_empty())
+            .map(ToString::to_string)
+    })
+}
+
+fn sanitize_env_key(value: &str) -> String {
+    value
+        .chars()
+        .map(|char| {
+            if char.is_ascii_alphanumeric() {
+                char.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
         .collect()
 }

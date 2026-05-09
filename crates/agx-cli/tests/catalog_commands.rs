@@ -59,6 +59,7 @@ fn commands_json_describes_install_and_inspect_flags() {
 
     assert!(install_flags.contains(&"--yes"));
     assert!(install_flags.contains(&"--dry-run"));
+    assert_eq!(install["summary"], "Install one or more agents");
     assert!(inspect_flags.contains(&"--refresh"));
     assert!(inspect_flags.contains(&"--no-cache"));
 }
@@ -418,6 +419,57 @@ fn schema_info_and_update_describe_payload_fields() {
         result_properties
             .iter()
             .any(|item| item["name"] == "latestVersion")
+    );
+}
+
+#[test]
+fn schema_install_describes_single_and_batch_payload_fields() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "schema", "install"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let properties = json["data"]["commands"][0]["dataSchema"]["properties"]
+        .as_array()
+        .expect("install properties should be an array");
+
+    assert!(properties.iter().any(|item| item["name"] == "agent"));
+    assert!(properties.iter().any(|item| item["name"] == "message"));
+    assert!(properties.iter().any(|item| item["name"] == "results"));
+    assert!(properties.iter().any(|item| item["name"] == "scope"));
+    assert!(properties.iter().any(|item| item["name"] == "summary"));
+
+    let results = properties
+        .iter()
+        .find(|item| item["name"] == "results")
+        .expect("results property should exist");
+    let result_properties = results["schema"]["items"]["properties"]
+        .as_array()
+        .expect("install result properties should be an array");
+    assert!(result_properties.iter().any(|item| item["name"] == "input"));
+    assert!(result_properties.iter().any(|item| item["name"] == "ok"));
+    assert!(
+        result_properties
+            .iter()
+            .any(|item| item["name"] == "warnings")
+    );
+
+    let summary = properties
+        .iter()
+        .find(|item| item["name"] == "summary")
+        .expect("summary property should exist");
+    let summary_properties = summary["schema"]["properties"]
+        .as_array()
+        .expect("install summary properties should be an array");
+    assert!(
+        summary_properties
+            .iter()
+            .any(|item| item["name"] == "installed")
+    );
+    assert!(
+        summary_properties
+            .iter()
+            .any(|item| item["name"] == "trackedExistingInstall")
     );
 }
 

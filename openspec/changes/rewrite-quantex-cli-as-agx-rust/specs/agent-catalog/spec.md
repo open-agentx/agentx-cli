@@ -16,6 +16,13 @@ AGX SHALL preserve the supported agent coverage from the `quantex-cli` reference
 - THEN the result includes the agents supported by the reference catalog
 - AND each agent exposes lifecycle-focused metadata needed for install, inspect, resolve, update, uninstall, and execution
 
+#### Scenario: Reference catalog adds a supported agent
+
+- GIVEN the `quantex-cli` reference catalog adds a new supported agent entry
+- WHEN AGX syncs catalog parity
+- THEN AGX adds the same lifecycle-facing agent metadata unless an OpenSpec change intentionally diverges
+- AND canonical names, aliases, install package metadata, and self-update commands stay aligned with the reference entry
+
 ### Requirement: Catalog entries MUST stay lifecycle-focused
 
 AGX catalog metadata SHALL stay scoped to lifecycle operations and stable identification.

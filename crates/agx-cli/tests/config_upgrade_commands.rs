@@ -208,6 +208,37 @@ fn upgrade_check_reports_available_update_with_exit_code_one() {
 }
 
 #[test]
+fn upgrade_check_reports_check_unavailable_when_latest_version_cannot_be_resolved() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {},
+  "self": {
+    "installSource": "bun"
+  }
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "upgrade", "--check"],
+        &[("AGX_TEST_LATEST_VERSION", "")],
+    );
+
+    assert_eq!(output.status.code(), Some(6));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "NETWORK_ERROR");
+    assert_eq!(json["data"]["status"], "check-unavailable");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("Unable to determine the latest")
+    );
+}
+
+#[test]
 fn upgrade_check_reports_up_to_date_when_versions_match() {
     let workspace = TestWorkspace::new();
     workspace.write_state_bytes(

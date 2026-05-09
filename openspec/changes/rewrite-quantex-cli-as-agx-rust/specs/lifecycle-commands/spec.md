@@ -18,6 +18,15 @@ AGX SHALL expose managed lifecycle commands for supported agents.
 - AND returns a structured lifecycle result
 - AND uses compatible state records for managed installs
 
+#### Scenario: User installs multiple agents in one command
+
+- GIVEN multiple requested agents exist in the AGX catalog
+- WHEN the user runs `agx install <agent-a> <agent-b> ...`
+- THEN AGX installs them sequentially
+- AND returns one structured result per requested input
+- AND includes an aggregate batch summary in structured output
+- AND continues processing later inputs even when an earlier input fails
+
 ### Requirement: AGX MUST support all-agent update planning
 
 AGX SHALL support updating all tracked managed agents.
@@ -28,6 +37,14 @@ AGX SHALL support updating all tracked managed agents.
 - WHEN the user runs `agx update --all`
 - THEN AGX groups or orders update work by recorded install source
 - AND returns one structured result per tracked agent
+
+#### Scenario: Managed install version metadata is more precise than binary probing
+
+- GIVEN AGX is tracking a managed npm or Bun install for an agent
+- AND the package manager can report the installed package version directly
+- WHEN AGX inspects the agent or evaluates `agx update --all`
+- THEN AGX prefers the managed package version over binary version probing
+- AND up-to-date detection uses that managed package version when available
 
 ### Requirement: AGX MUST support agent execution
 

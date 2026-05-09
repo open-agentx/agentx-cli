@@ -4,6 +4,7 @@ use std::process::Command;
 use crate::agents::AgentDefinition;
 use crate::config;
 use crate::context::CliContext;
+use crate::package_manager;
 use crate::state;
 use crate::version_registry;
 
@@ -25,9 +26,22 @@ pub struct AgentInspection {
 pub fn inspect_agent(agent: AgentDefinition, context: &CliContext) -> AgentInspection {
     let binary_path = find_binary_in_path(agent.binary_name);
     let installed = binary_path.is_some();
-    let installed_version = binary_path
+    let installed_state = state::get_installed_agent_state(agent.name);
+    let installed_version = installed_state
         .as_ref()
-        .and_then(|path| probe_binary_version(path));
+        .and_then(|state| {
+            state.package_name.as_deref().and_then(|package_name| {
+                package_manager::get_managed_installed_package_version(
+                    &state.install_type,
+                    package_name,
+                )
+            })
+        })
+        .or_else(|| {
+            binary_path
+                .as_ref()
+                .and_then(|path| probe_binary_version(path))
+        });
     let latest_version = get_latest_version_for_agent(agent, context);
 
     AgentInspection {

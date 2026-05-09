@@ -189,6 +189,92 @@ fn install_manual_only_agent_requires_manual_action() {
 }
 
 #[test]
+fn install_multiple_agents_returns_batch_json_summary() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "install", "qoder", "reasonix"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["action"], "install");
+    assert_eq!(json["data"]["scope"], "batch");
+    assert_eq!(json["data"]["summary"]["installed"], 2);
+    let results = json["data"]["results"]
+        .as_array()
+        .expect("results should be an array");
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0]["status"], "installed");
+    assert_eq!(results[1]["status"], "installed");
+    assert_eq!(results[1]["agent"]["name"], "reasonix");
+}
+
+#[test]
+fn install_multiple_agents_continues_after_failure_and_reports_aggregate_error() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "install", "qoder", "missing-agent"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let json = stdout_json(&output);
+    assert_eq!(json["error"]["code"], "INSTALL_FAILED");
+    assert_eq!(json["data"]["scope"], "batch");
+    let results = json["data"]["results"]
+        .as_array()
+        .expect("results should be an array");
+    assert_eq!(results[0]["status"], "installed");
+    assert_eq!(results[1]["status"], "failed");
+    assert_eq!(results[1]["input"], "missing-agent");
+}
+
+#[test]
+fn install_multiple_agents_ndjson_emits_started_progress_and_result_events() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--output", "ndjson", "install", "qoder", "reasonix"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let lines = stdout_json_lines(&output);
+    assert_eq!(lines.len(), 4);
+    assert_eq!(lines[0]["type"], "started");
+    assert_eq!(lines[0]["data"]["scope"], "batch");
+    assert_eq!(lines[1]["type"], "progress");
+    assert_eq!(lines[1]["data"]["agent"]["name"], "qoder");
+    assert_eq!(lines[2]["type"], "progress");
+    assert_eq!(lines[2]["data"]["agent"]["name"], "reasonix");
+    assert_eq!(lines[3]["type"], "result");
+    assert_eq!(lines[3]["data"]["data"]["scope"], "batch");
+}
+
+#[test]
+fn install_multiple_agents_human_output_includes_summary() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["install", "qoder", "reasonix"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let stdout = stdout_text(&output);
+    assert!(stdout.contains("Qoder CLI installed successfully"));
+    assert!(stdout.contains("Reasonix installed successfully"));
+    assert!(stdout.contains("Summary: installed 2"));
+}
+
+#[test]
 fn ensure_reports_already_installed_when_binary_exists() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
@@ -1003,6 +1089,70 @@ fn update_all_reports_tracked_script_installs_as_up_to_date_when_version_does_no
     assert_eq!(result["status"], "up-to-date");
     assert_eq!(result["installedVersion"], "0.1.0");
     assert_eq!(result["latestVersion"], "0.1.0");
+}
+
+#[test]
+fn update_all_uses_managed_package_versions_for_up_to_date_detection() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("qodercli");
+    workspace.install_fake_agent_binary("pi");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "qoder": {
+      "agentName": "qoder",
+      "installType": "bun",
+      "packageName": "@qoder-ai/qodercli",
+      "packageTargetKind": "package"
+    },
+    "pi": {
+      "agentName": "pi",
+      "installType": "bun",
+      "packageName": "@mariozechner/pi-coding-agent",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "--all"],
+        &[
+            ("AGX_TEST_MANAGED_VERSION__QODER_AI_QODERCLI", "1.0.43"),
+            (
+                "AGX_TEST_MANAGED_VERSION__MARIOZECHNER_PI_CODING_AGENT",
+                "0.73.1",
+            ),
+            ("AGX_TEST_LATEST_PACKAGE__QODER_AI_QODERCLI", "1.0.43"),
+            (
+                "AGX_TEST_LATEST_PACKAGE__MARIOZECHNER_PI_CODING_AGENT",
+                "0.73.1",
+            ),
+        ],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let results = json["data"]["results"]
+        .as_array()
+        .expect("results should be an array");
+
+    let qoder = results
+        .iter()
+        .find(|entry| entry["name"] == "qoder")
+        .expect("qoder result should exist");
+    let pi = results
+        .iter()
+        .find(|entry| entry["name"] == "pi")
+        .expect("pi result should exist");
+
+    assert_eq!(qoder["status"], "up-to-date");
+    assert_eq!(qoder["installedVersion"], "1.0.43");
+    assert_eq!(pi["status"], "up-to-date");
+    assert_eq!(pi["installedVersion"], "0.73.1");
 }
 
 #[test]

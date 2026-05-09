@@ -162,10 +162,10 @@ pub enum Command {
         agent: String,
     },
 
-    #[command(alias = "i", about = "Install an agent")]
+    #[command(alias = "i", about = "Install one or more agents")]
     Install {
-        #[arg(help = "Agent name or alias")]
-        agent: String,
+        #[arg(required = true, num_args = 1.., help = "Agent name or alias")]
+        agents: Vec<String>,
     },
 
     #[command(about = "Ensure an agent is installed")]

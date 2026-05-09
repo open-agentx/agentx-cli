@@ -41,11 +41,12 @@ pub fn self_update_commands(agent: AgentDefinition) -> Vec<&'static str> {
         "openhands" => vec!["uv tool upgrade openhands --python 3.12"],
         "pi" => vec!["pi update"],
         "qoder" => vec!["qodercli update"],
+        "reasonix" => vec!["reasonix update"],
         _ => Vec::new(),
     }
 }
 
-const AGENTS: [AgentDefinition; 26] = [
+const AGENTS: [AgentDefinition; 27] = [
     AgentDefinition {
         name: "auggie",
         aliases: &[],
@@ -245,6 +246,14 @@ const AGENTS: [AgentDefinition; 26] = [
         homepage: "https://qwenlm.github.io/qwen-code-docs/",
         binary_name: "qwen",
         npm_package: Some("@qwen-code/qwen-code"),
+    },
+    AgentDefinition {
+        name: "reasonix",
+        aliases: &["deepseek-reasonix"],
+        display_name: "Reasonix",
+        homepage: "https://github.com/esengine/DeepSeek-Reasonix",
+        binary_name: "reasonix",
+        npm_package: Some("reasonix"),
     },
     AgentDefinition {
         name: "vibe",

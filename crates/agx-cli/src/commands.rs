@@ -30,7 +30,7 @@ pub fn run_command(command: &Command, context: &CliContext) -> CommandResult {
         } => exec_command(agent, args, *install_policy, context),
         Command::External(args) => shortcut_exec_command(args, context),
         Command::Info { agent } => info_command(agent, context),
-        Command::Install { agent } => install_command(agent, context),
+        Command::Install { agents } => install_command(agents, context),
         Command::Inspect { agent } => inspect_command(agent, context),
         Command::List => list_command(context),
         Command::Resolve { agent } => resolve_command(agent, context),
@@ -228,9 +228,52 @@ struct LifecycleData {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct LifecycleBatchData {
+    results: Vec<LifecycleBatchResultItem>,
+    scope: &'static str,
+    summary: LifecycleBatchSummary,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LifecycleBatchResultItem {
+    agent: LifecycleAgent,
+    changed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<BatchErrorData>,
+    input: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    install_state: Option<crate::state::InstalledAgentState>,
+    installed: bool,
+    ok: bool,
+    status: &'static str,
+    warnings: Vec<CommandWarning>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BatchErrorData {
+    code: AgxErrorCode,
+    message: String,
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LifecycleBatchSummary {
+    already_installed: usize,
+    failed: usize,
+    installed: usize,
+    locked: usize,
+    planned: usize,
+    tracked_existing_install: usize,
+    untracked_existing_install: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct LifecycleAgent {
-    display_name: &'static str,
-    name: &'static str,
+    display_name: String,
+    name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -562,12 +605,81 @@ fn list_command(context: &CliContext) -> CommandResult {
     )
 }
 
-fn install_command(agent_name: &str, context: &CliContext) -> CommandResult {
-    lifecycle_command(
+fn install_command(agent_names: &[String], context: &CliContext) -> CommandResult {
+    if agent_names.len() <= 1 {
+        return lifecycle_command(
+            "install",
+            agent_names
+                .first()
+                .expect("clap should require at least one install target"),
+            context,
+            package_manager::install_agent,
+        );
+    }
+
+    let _ = crate::output::emit_ndjson_event(
         "install",
-        agent_name,
+        "started",
+        serde_json::json!({ "scope": "batch" }),
+        Some(CommandTarget {
+            kind: crate::output::TargetKind::Agent,
+            name: None,
+        }),
         context,
-        package_manager::install_agent,
+    );
+
+    let mut results = Vec::new();
+    for agent_name in agent_names {
+        let result = lifecycle_command_with_started(
+            "install",
+            agent_name,
+            context,
+            package_manager::install_agent,
+            false,
+        );
+        let batch_result = lifecycle_batch_result_item(agent_name, &result);
+        let target_name = batch_result.agent.name.clone();
+
+        let _ = crate::output::emit_ndjson_event(
+            "install",
+            "progress",
+            &batch_result,
+            Some(CommandTarget::agent(target_name)),
+            context,
+        );
+
+        results.push(batch_result);
+    }
+
+    let summary = summarize_lifecycle_batch_results(&results);
+    let data = LifecycleBatchData {
+        results,
+        scope: "batch",
+        summary,
+    };
+
+    if data.results.iter().any(|result| !result.ok) {
+        let error = batch_lifecycle_error("install", &data.results);
+        return CommandResult::error_with_data(
+            "install",
+            data,
+            error,
+            CommandTarget {
+                kind: crate::output::TargetKind::Agent,
+                name: None,
+            },
+            context,
+        );
+    }
+
+    CommandResult::success(
+        "install",
+        data,
+        CommandTarget {
+            kind: crate::output::TargetKind::Agent,
+            name: None,
+        },
+        context,
     )
 }
 
@@ -632,6 +744,10 @@ fn upgrade_command(
     context: &CliContext,
 ) -> CommandResult {
     let inspection = self_upgrade::inspect_self_with_context(channel, context);
+    let target = CommandTarget {
+        kind: crate::output::TargetKind::SelfTarget,
+        name: Some("agx".to_string()),
+    };
     match self_upgrade::upgrade_self(context, channel, check) {
         Ok(result) => {
             let stale_latest = result
@@ -648,10 +764,6 @@ fn upgrade_command(
                     inspection.install_source,
                     self_upgrade::InstallSourceKind::Bun | self_upgrade::InstallSourceKind::Npm
                 );
-            let target = CommandTarget {
-                kind: crate::output::TargetKind::SelfTarget,
-                name: Some("agx".to_string()),
-            };
             let mut command_result = if check && result.status == "update-available" {
                 CommandResult::success_with_exit_code("upgrade", result, target, context, 1)
             } else {
@@ -678,6 +790,27 @@ fn upgrade_command(
             }
             command_result
         }
+        Err(error) if check && matches!(error.code, AgxErrorCode::NetworkError) => {
+            CommandResult::error_with_data(
+                "upgrade",
+                self_upgrade::UpgradeData {
+                    channel: Some(inspection.update_channel),
+                    command: Vec::new(),
+                    current_version: Some(inspection.current_version),
+                    dry_run: context.dry_run,
+                    install_source: inspection.install_source,
+                    latest_version: inspection.latest_version,
+                    recovery_hint: None,
+                    message: Some(error.message.clone()),
+                    package_name: "agxctl",
+                    status: "check-unavailable",
+                    verified_version: None,
+                },
+                error,
+                target,
+                context,
+            )
+        }
         Err(error) => CommandResult::error_with_data(
             "upgrade",
             self_upgrade::UpgradeData {
@@ -701,10 +834,7 @@ fn upgrade_command(
                 verified_version: None,
             },
             error,
-            CommandTarget {
-                kind: crate::output::TargetKind::SelfTarget,
-                name: Some("agx".to_string()),
-            },
+            target,
             context,
         ),
     }
@@ -1265,17 +1395,32 @@ fn lifecycle_command(
         &CliContext,
     ) -> Result<package_manager::LifecycleResult, AgxError>,
 ) -> CommandResult {
+    lifecycle_command_with_started(action, agent_name, context, operation, true)
+}
+
+fn lifecycle_command_with_started(
+    action: &'static str,
+    agent_name: &str,
+    context: &CliContext,
+    operation: fn(
+        AgentDefinition,
+        &CliContext,
+    ) -> Result<package_manager::LifecycleResult, AgxError>,
+    emit_started: bool,
+) -> CommandResult {
     let Some(agent) = agents::resolve_agent(agent_name) else {
         return agent_not_found_result(action, agent_name, context);
     };
 
-    let _ = crate::output::emit_ndjson_event(
-        action,
-        "started",
-        serde_json::json!({ "agent": agent.name }),
-        Some(CommandTarget::agent(agent.name)),
-        context,
-    );
+    if emit_started {
+        let _ = crate::output::emit_ndjson_event(
+            action,
+            "started",
+            serde_json::json!({ "agent": agent.name }),
+            Some(CommandTarget::agent(agent.name)),
+            context,
+        );
+    }
 
     match operation(agent, context) {
         Ok(result) => {
@@ -1283,8 +1428,8 @@ fn lifecycle_command(
                 action,
                 LifecycleData {
                     agent: LifecycleAgent {
-                        display_name: agent.display_name,
-                        name: agent.name,
+                        display_name: agent.display_name.to_string(),
+                        name: agent.name.to_string(),
                     },
                     changed: result.changed,
                     install_state: result.install_state,
@@ -1302,6 +1447,143 @@ fn lifecycle_command(
         Err(error) => {
             CommandResult::error(action, error, CommandTarget::agent(agent.name), context)
         }
+    }
+}
+
+fn lifecycle_batch_result_item(input: &str, result: &CommandResult) -> LifecycleBatchResultItem {
+    let data = result.data.as_ref();
+    let agent = data
+        .map(|value| LifecycleAgent {
+            display_name: value["agent"]["displayName"]
+                .as_str()
+                .unwrap_or(input)
+                .to_string(),
+            name: value["agent"]["name"]
+                .as_str()
+                .or_else(|| {
+                    result
+                        .target
+                        .as_ref()
+                        .and_then(|target| target.name.as_deref())
+                })
+                .unwrap_or(input)
+                .to_string(),
+        })
+        .or_else(|| {
+            result.target.as_ref().map(|target| LifecycleAgent {
+                display_name: input.to_string(),
+                name: target.name.clone().unwrap_or_else(|| input.to_string()),
+            })
+        })
+        .unwrap_or(LifecycleAgent {
+            display_name: input.to_string(),
+            name: input.to_string(),
+        });
+
+    let warnings = result.warnings.clone();
+    LifecycleBatchResultItem {
+        agent,
+        changed: data
+            .and_then(|value| value.get("changed"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
+        error: result.error.as_ref().map(|error| BatchErrorData {
+            code: error.code,
+            message: error.message.clone(),
+        }),
+        input: input.to_string(),
+        install_state: data
+            .and_then(|value| value.get("installState"))
+            .and_then(|value| serde_json::from_value(value.clone()).ok()),
+        installed: data
+            .and_then(|value| value.get("installed"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
+        ok: result.ok,
+        status: lifecycle_batch_status(result),
+        warnings,
+    }
+}
+
+fn lifecycle_batch_status(result: &CommandResult) -> &'static str {
+    if !result.ok {
+        return if result
+            .error
+            .as_ref()
+            .is_some_and(|error| error.code == AgxErrorCode::ResourceLocked)
+        {
+            "locked"
+        } else {
+            "failed"
+        };
+    }
+
+    if result
+        .warnings
+        .iter()
+        .any(|warning| warning.code == "DRY_RUN")
+    {
+        return "planned";
+    }
+
+    let message = result
+        .data
+        .as_ref()
+        .and_then(|data| data.get("message"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    if message.contains("now tracking the existing install") {
+        return "tracked-existing-install";
+    }
+    if message.contains("already installed, but this install is not tracked") {
+        return "untracked-existing-install";
+    }
+    if message.contains("already installed.") {
+        return "already-installed";
+    }
+
+    "installed"
+}
+
+fn summarize_lifecycle_batch_results(
+    results: &[LifecycleBatchResultItem],
+) -> LifecycleBatchSummary {
+    let mut summary = LifecycleBatchSummary::default();
+    for result in results {
+        match result.status {
+            "already-installed" => summary.already_installed += 1,
+            "failed" => summary.failed += 1,
+            "installed" => summary.installed += 1,
+            "locked" => summary.locked += 1,
+            "planned" => summary.planned += 1,
+            "tracked-existing-install" => summary.tracked_existing_install += 1,
+            "untracked-existing-install" => summary.untracked_existing_install += 1,
+            _ => {}
+        }
+    }
+    summary
+}
+
+fn batch_lifecycle_error(action: &'static str, results: &[LifecycleBatchResultItem]) -> AgxError {
+    let only_locks = results.iter().filter(|result| !result.ok).all(|result| {
+        result
+            .error
+            .as_ref()
+            .is_some_and(|error| error.code == AgxErrorCode::ResourceLocked)
+    });
+
+    if only_locks {
+        AgxError::new(
+            AgxErrorCode::ResourceLocked,
+            format!(
+                "One or more agents could not be processed because another AGX process already holds the lifecycle lock during {action}."
+            ),
+        )
+    } else {
+        AgxError::new(
+            AgxErrorCode::InstallFailed,
+            "One or more agents failed to install.",
+        )
     }
 }
 
@@ -1456,7 +1738,7 @@ fn command_catalog() -> Vec<CommandDescriptor> {
             name: "install",
             output_schema_ref: "#/commands/install",
             stability: "stable",
-            summary: "Install an agent",
+            summary: "Install one or more agents",
         },
         CommandDescriptor {
             flags: vec![
@@ -1826,8 +2108,8 @@ fn schema_catalog() -> Vec<SchemaDocument> {
             ndjson_event_schema: ndjson_event_schema.clone(),
         },
         SchemaDocument {
-            data_schema: lifecycle_data_schema(),
-            description: "Install result for an agent",
+            data_schema: install_data_schema(),
+            description: "Install result for one or more agents",
             envelope_schema: envelope_schema.clone(),
             name: "install",
             ndjson_event_schema: ndjson_event_schema.clone(),
@@ -1901,6 +2183,22 @@ fn lifecycle_data_schema() -> JsonSchema {
         ("installState", installed_agent_state_schema()),
         ("installed", boolean_schema()),
         ("message", string_schema()),
+    ])
+}
+
+fn install_data_schema() -> JsonSchema {
+    object_schema(vec![
+        ("agent", lifecycle_agent_schema()),
+        ("changed", boolean_schema()),
+        ("installState", installed_agent_state_schema()),
+        ("installed", boolean_schema()),
+        ("message", string_schema()),
+        (
+            "results",
+            array_schema(lifecycle_batch_result_item_schema()),
+        ),
+        ("scope", string_schema()),
+        ("summary", lifecycle_batch_summary_schema()),
     ])
 }
 
@@ -2129,6 +2427,44 @@ fn update_result_schema() -> JsonSchema {
         ("resource", string_schema()),
         ("status", string_schema()),
         ("strategy", string_schema()),
+    ])
+}
+
+fn lifecycle_batch_result_item_schema() -> JsonSchema {
+    object_schema(vec![
+        ("agent", lifecycle_agent_schema()),
+        ("changed", boolean_schema()),
+        (
+            "error",
+            object_schema(vec![
+                ("code", string_schema()),
+                ("message", string_schema()),
+            ]),
+        ),
+        ("input", string_schema()),
+        ("installState", installed_agent_state_schema()),
+        ("installed", boolean_schema()),
+        ("ok", boolean_schema()),
+        ("status", string_schema()),
+        (
+            "warnings",
+            array_schema(object_schema(vec![
+                ("code", string_schema()),
+                ("message", string_schema()),
+            ])),
+        ),
+    ])
+}
+
+fn lifecycle_batch_summary_schema() -> JsonSchema {
+    object_schema(vec![
+        ("alreadyInstalled", integer_schema()),
+        ("failed", integer_schema()),
+        ("installed", integer_schema()),
+        ("locked", integer_schema()),
+        ("planned", integer_schema()),
+        ("trackedExistingInstall", integer_schema()),
+        ("untrackedExistingInstall", integer_schema()),
     ])
 }
 

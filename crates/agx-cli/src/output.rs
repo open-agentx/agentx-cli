@@ -48,7 +48,7 @@ pub enum TargetKind {
     System,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandWarning {
     pub code: String,
@@ -292,6 +292,7 @@ fn render_human(result: &CommandResult) {
             }
         }
         "exec" => render_exec(result),
+        "install" => render_install(result),
         "list" => render_list(result),
         "info" => render_info(result),
         "inspect" => render_inspect(result),
@@ -1000,6 +1001,105 @@ fn render_update(result: &CommandResult) {
             render_update_summary(results);
         }
     }
+}
+
+fn render_install(result: &CommandResult) {
+    if let Some(error) = &result.error
+        && result
+            .data
+            .as_ref()
+            .and_then(|data| data.get("scope"))
+            .and_then(serde_json::Value::as_str)
+            != Some("batch")
+    {
+        eprintln!("{}", error.message);
+        return;
+    }
+
+    let Some(data) = &result.data else {
+        return;
+    };
+
+    if data["scope"].as_str() == Some("batch") {
+        render_install_batch(data);
+        return;
+    }
+
+    let display_name = data["agent"]["displayName"].as_str().unwrap_or("Agent");
+    if result
+        .warnings
+        .iter()
+        .any(|warning| warning.code == "DRY_RUN")
+    {
+        println!("Dry run: would install {display_name}.");
+        return;
+    }
+
+    if let Some(message) = data["message"].as_str() {
+        println!("{message}");
+        return;
+    }
+
+    println!("Installing {display_name}...");
+    println!("{display_name} installed successfully!");
+}
+
+fn render_install_batch(data: &Value) {
+    if let Some(results) = data["results"].as_array() {
+        for item in results {
+            let display_name = item["agent"]["displayName"].as_str().unwrap_or("Agent");
+            match item["status"].as_str().unwrap_or("unknown") {
+                "installed" => {
+                    println!("Installing {display_name}...");
+                    println!("{display_name} installed successfully!");
+                }
+                "tracked-existing-install" | "already-installed" | "untracked-existing-install" => {
+                    let message = first_batch_warning_message(item)
+                        .or_else(|| item["error"]["message"].as_str())
+                        .unwrap_or("Install state unchanged.");
+                    println!("{message}");
+                }
+                "planned" => {
+                    let message = first_batch_warning_message(item)
+                        .unwrap_or("Dry run: would install the requested agent.");
+                    println!("{message}");
+                }
+                "locked" | "failed" => {
+                    let message = item["error"]["message"]
+                        .as_str()
+                        .unwrap_or("Failed to install requested agent.");
+                    eprintln!("{message}");
+                }
+                _ => println!("{item}"),
+            }
+        }
+    }
+
+    let mut parts = Vec::new();
+    for (label, key) in [
+        ("installed", "installed"),
+        ("already installed", "alreadyInstalled"),
+        ("tracked existing", "trackedExistingInstall"),
+        ("untracked existing", "untrackedExistingInstall"),
+        ("failed", "failed"),
+        ("locked", "locked"),
+        ("planned", "planned"),
+    ] {
+        let count = data["summary"][key].as_u64().unwrap_or(0);
+        if count > 0 {
+            parts.push(format!("{label} {count}"));
+        }
+    }
+    if !parts.is_empty() {
+        println!("Summary: {}", parts.join(", "));
+    }
+}
+
+fn first_batch_warning_message(item: &Value) -> Option<&str> {
+    item["warnings"]
+        .as_array()
+        .and_then(|warnings| warnings.first())
+        .and_then(|warning| warning["message"].as_str())
 }
 
 fn render_update_summary(results: &[Value]) {
