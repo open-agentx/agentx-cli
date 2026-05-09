@@ -1424,16 +1424,35 @@ fn render_exec(result: &CommandResult) {
     }
 
     if let Some(data) = &result.data {
-        if let Some(stdout) = data["execution"]["stdout"].as_str() {
-            print!("{stdout}");
-        }
-        if let Some(stderr) = data["execution"]["stderr"].as_str() {
-            eprint!("{stderr}");
-        }
-        if data["execution"]["dryRun"].as_bool().unwrap_or(false)
-            && let Some(message) = data["execution"]["message"].as_str()
-        {
-            println!("{message}");
+        let launched = data["execution"]["launched"].as_bool().unwrap_or(false);
+        let installed = data["execution"]["installed"].as_bool().unwrap_or(false);
+        if !launched {
+            let binary_name = data["agent"]["binaryName"]
+                .as_str()
+                .or_else(|| data["agent"]["name"].as_str())
+                .unwrap_or("agent");
+            let args = data["execution"]["args"]
+                .as_array()
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .unwrap_or_default();
+            if installed {
+                if args.is_empty() {
+                    println!("Dry run: would run {binary_name}");
+                } else {
+                    println!("Dry run: would run {binary_name} {args}");
+                }
+            } else {
+                println!(
+                    "Dry run: would install {}",
+                    data["agent"]["displayName"].as_str().unwrap_or("agent")
+                );
+            }
         }
     }
 }

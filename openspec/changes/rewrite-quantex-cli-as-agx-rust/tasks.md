@@ -58,6 +58,7 @@
 - [x] 4.3.16 Close latest schema/meta parity gaps from `cursor_quantex_cli_command_coverage_dif.md`, including strict `required[]` arrays, ISO-8601 command metadata timestamps, and cache/network freshness metadata propagation.
 - [x] 4.3.17 Close latest command-catalog flag parity gaps from `cursor_quantex_cli_command_coverage_dif.md`, including `exec`, `install`, `ensure`, and `upgrade` flag listings.
 - [x] 4.3.18 Close latest structured-error parity gaps from `cursor_quantex_cli_command_coverage_dif.md`, including machine-readable `error.details` for unknown-target and missing-install preflight failures.
+- [x] 4.3.19 Close latest structured `exec` contract parity gaps from `quantex-cli/src/commands/run.ts` and `schema.ts`, including preflight-oriented execution fields and schema alignment away from captured process output.
 - [x] 4.4 Add AGX agent workflow bootstrap, OpenSpec README/config, and project-memory spec.
 - [x] 4.5 Add task-start and worktree runbooks.
 - [x] 4.6 Add Rust workspace architecture ADR.

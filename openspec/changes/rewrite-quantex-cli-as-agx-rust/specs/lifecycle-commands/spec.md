@@ -64,6 +64,13 @@ AGX SHALL execute supported agent binaries through explicit and shortcut command
 - AND forwards arguments to the agent process
 - AND returns a structured execution result
 
+#### Scenario: Structured execution uses a preflight-oriented machine contract
+
+- WHEN AGX emits JSON or NDJSON data for `agx exec <agent> -- <args>`
+- THEN `data.execution` exposes `args`, `installPolicy`, `installed`, `interactive`, and `launched`
+- AND preflight failures duplicate install guidance into both `data.execution.installGuidance` and `error.details`
+- AND launched executions do not depend on captured child stdout or stderr fields in the structured contract
+
 #### Scenario: Explicit execution defaults to install confirmation
 
 - GIVEN the requested agent is not installed

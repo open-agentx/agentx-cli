@@ -350,9 +350,34 @@ fn schema_exec_and_resolve_include_install_guidance_fields() {
             .any(|item| item["name"] == "installPolicy")
     );
     assert!(
+        execution_properties
+            .iter()
+            .any(|item| item["name"] == "installed")
+    );
+    assert!(
+        execution_properties
+            .iter()
+            .any(|item| item["name"] == "interactive")
+    );
+    assert!(
+        execution_properties
+            .iter()
+            .any(|item| item["name"] == "launched")
+    );
+    assert!(
         exec_guidance_properties
             .iter()
             .any(|item| item["name"] == "installMethods")
+    );
+    assert!(
+        !execution_properties
+            .iter()
+            .any(|item| item["name"] == "stdout")
+    );
+    assert!(
+        !execution_properties
+            .iter()
+            .any(|item| item["name"] == "stderr")
     );
 
     let resolve_output = run_agx(&workspace, &["--json", "schema", "resolve"]);

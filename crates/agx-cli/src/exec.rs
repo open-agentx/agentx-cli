@@ -13,34 +13,27 @@ use crate::{inspection, package_manager};
 pub struct ExecResult {
     pub agent: ExecAgent,
     pub execution: ExecExecution,
+    #[serde(skip_serializing)]
+    pub exit_code: u8,
 }
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecExecution {
     pub args: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub binary_path: Option<String>,
-    pub command: Vec<String>,
-    pub dry_run: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub exit_code: Option<u8>,
     pub install_policy: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub install_guidance: Option<ExecInstallGuidance>,
-    pub installed_after: bool,
-    pub installed_before: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub stderr: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub stdout: Option<String>,
+    pub installed: bool,
+    pub interactive: bool,
+    pub launched: bool,
 }
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecAgent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub binary_name: Option<&'static str>,
     pub display_name: &'static str,
     pub name: &'static str,
 }
@@ -78,36 +71,17 @@ pub fn execute_agent(
         !installed_before && matches!(install_policy, InstallPolicyArg::Prompt);
 
     if context.dry_run {
-        let needs_install = !installed_before
-            || matches!(
-                install_policy,
-                InstallPolicyArg::Always | InstallPolicyArg::Prompt
-            );
-        let command = build_display_command(agent.binary_name, args);
         return Ok(ExecResult {
             agent: exec_agent(agent),
             execution: ExecExecution {
                 args: args.to_vec(),
-                binary_path: inspection::find_binary_in_path(agent.binary_name)
-                    .map(|path| path.to_string_lossy().into_owned()),
-                command,
-                dry_run: true,
-                exit_code: None,
                 install_policy: install_policy_label(install_policy),
                 install_guidance: (!installed_before).then(|| install_guidance(agent, args)),
-                installed_after: installed_before,
-                installed_before,
-                message: Some(if needs_install {
-                    format!(
-                        "Dry run: would ensure {} is installed, then execute it.",
-                        agent.display_name
-                    )
-                } else {
-                    format!("Dry run: would execute {}.", agent.display_name)
-                }),
-                stderr: None,
-                stdout: None,
+                installed: true,
+                interactive,
+                launched: false,
             },
+            exit_code: 0,
         });
     }
 
@@ -162,7 +136,6 @@ pub fn execute_agent(
         ));
     };
 
-    let command = build_display_command(&binary_path.to_string_lossy(), args);
     let output =
         run_agent_command(&binary_path, args, context.timeout_ms, context).map_err(|error| {
             if matches!(error.code, AgxErrorCode::InvalidArgument)
@@ -180,18 +153,13 @@ pub fn execute_agent(
         agent: exec_agent(agent),
         execution: ExecExecution {
             args: args.to_vec(),
-            binary_path: Some(binary_path.to_string_lossy().into_owned()),
-            command,
-            dry_run: false,
-            exit_code: Some(output.exit_code),
             install_policy: install_policy_label(install_policy),
             install_guidance: None,
-            installed_after: true,
-            installed_before,
-            message: None,
-            stderr: non_empty_output(output.stderr),
-            stdout: non_empty_output(output.stdout),
+            installed: true,
+            interactive,
+            launched: true,
         },
+        exit_code: output.exit_code,
     })
 }
 
@@ -218,11 +186,7 @@ fn run_agent_command(
                 AgxErrorCode::InvalidArgument,
                 "Failed to execute agent: synthetic spawn failure",
             )),
-            _ => Ok(AgentCommandOutput {
-                exit_code: 0,
-                stderr: String::new(),
-                stdout: String::new(),
-            }),
+            _ => Ok(AgentCommandOutput { exit_code: 0 }),
         };
     }
 
@@ -254,8 +218,6 @@ fn run_agent_command(
                 .code()
                 .and_then(|code| u8::try_from(code).ok())
                 .unwrap_or(1),
-            stderr: String::new(),
-            stdout: String::new(),
         });
     }
 
@@ -317,8 +279,6 @@ fn run_agent_command_with_timeout(
                         .code()
                         .and_then(|code| u8::try_from(code).ok())
                         .unwrap_or(1),
-                    stderr: String::new(),
-                    stdout: String::new(),
                 });
             }
 
@@ -346,31 +306,24 @@ fn run_agent_command_with_timeout(
 
 struct AgentCommandOutput {
     exit_code: u8,
-    stderr: String,
-    stdout: String,
 }
 
 impl AgentCommandOutput {
     fn from_output(output: std::process::Output) -> Self {
-        let std::process::Output {
-            status,
-            stdout,
-            stderr,
-        } = output;
+        let status = output.status;
 
         Self {
             exit_code: status
                 .code()
                 .and_then(|code| u8::try_from(code).ok())
                 .unwrap_or(1),
-            stderr: String::from_utf8_lossy(&stderr).to_string(),
-            stdout: String::from_utf8_lossy(&stdout).to_string(),
         }
     }
 }
 
 fn exec_agent(agent: AgentDefinition) -> ExecAgent {
     ExecAgent {
+        binary_name: Some(agent.binary_name),
         display_name: agent.display_name,
         name: agent.name,
     }
@@ -382,20 +335,6 @@ fn install_policy_label(install_policy: InstallPolicyArg) -> &'static str {
         InstallPolicyArg::Never => "never",
         InstallPolicyArg::IfMissing => "if-missing",
         InstallPolicyArg::Always => "always",
-    }
-}
-
-fn build_display_command(program: &str, args: &[String]) -> Vec<String> {
-    std::iter::once(program.to_string())
-        .chain(args.iter().cloned())
-        .collect()
-}
-
-fn non_empty_output(output: String) -> Option<String> {
-    if output.is_empty() {
-        None
-    } else {
-        Some(output)
     }
 }
 

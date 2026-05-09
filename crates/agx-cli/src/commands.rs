@@ -75,11 +75,13 @@ fn shortcut_exec_command(args: &[String], context: &CliContext) -> CommandResult
     } else {
         agent_args
     };
+    let interactive =
+        context.interactive && matches!(context.output_mode, crate::context::OutputMode::Human);
 
     if let Some(agent) = agents::resolve_agent(agent_name)
         && inspection::find_binary_in_path(agent.binary_name).is_none()
     {
-        if !context.interactive && !context.assume_yes {
+        if !interactive && !context.assume_yes {
             let result = exec_missing_result(
                 agent,
                 agent_args,
@@ -94,7 +96,7 @@ fn shortcut_exec_command(args: &[String], context: &CliContext) -> CommandResult
             return result;
         }
 
-        if context.interactive && !context.assume_yes && !confirm_shortcut_install(agent, context) {
+        if interactive && !context.assume_yes && !confirm_shortcut_install(agent, context) {
             return CommandResult::error_with_exit_code(
                 "exec",
                 AgxError::new(
@@ -709,7 +711,7 @@ fn exec_command(
 
     match exec::execute_agent(agent, args, install_policy, context) {
         Ok(result) => {
-            let exit_code = result.execution.exit_code.unwrap_or(0);
+            let exit_code = result.exit_code;
             CommandResult::success_with_exit_code(
                 "exec",
                 result,
@@ -2207,13 +2209,14 @@ fn schema_catalog() -> Vec<SchemaDocument> {
                 (
                     "agent",
                     object_schema(vec![
+                        ("binaryName", string_schema()),
                         ("displayName", string_schema()),
                         ("name", string_schema()),
                     ]),
                 ),
                 ("execution", exec_execution_schema()),
             ]),
-            description: "Agent execution result",
+            description: "Preflight contract for managed agent execution",
             envelope_schema: envelope_schema.clone(),
             name: "exec",
             ndjson_event_schema: ndjson_event_schema.clone(),
@@ -2519,17 +2522,11 @@ fn exec_install_guidance_schema() -> JsonSchema {
 fn exec_execution_schema() -> JsonSchema {
     object_schema(vec![
         ("args", array_schema(string_schema())),
-        ("binaryPath", string_schema()),
-        ("command", array_schema(string_schema())),
-        ("dryRun", boolean_schema()),
-        ("exitCode", integer_schema()),
         ("installGuidance", exec_install_guidance_schema()),
         ("installPolicy", string_schema()),
-        ("installedAfter", boolean_schema()),
-        ("installedBefore", boolean_schema()),
-        ("message", string_schema()),
-        ("stderr", string_schema()),
-        ("stdout", string_schema()),
+        ("installed", boolean_schema()),
+        ("interactive", boolean_schema()),
+        ("launched", boolean_schema()),
     ])
 }
 
@@ -2817,17 +2814,12 @@ fn exec_missing_result(
         "exec",
         ExecCommandData {
             agent: exec::ExecAgent {
+                binary_name: Some(agent.binary_name),
                 display_name: agent.display_name,
                 name: agent.name,
             },
             execution: exec::ExecExecution {
                 args: args.to_vec(),
-                binary_path: None,
-                command: std::iter::once(agent.binary_name.to_string())
-                    .chain(args.iter().cloned())
-                    .collect(),
-                dry_run: false,
-                exit_code: None,
                 install_policy: match install_policy {
                     crate::cli::InstallPolicyArg::Prompt => "prompt",
                     crate::cli::InstallPolicyArg::Never => "never",
@@ -2835,11 +2827,10 @@ fn exec_missing_result(
                     crate::cli::InstallPolicyArg::Always => "always",
                 },
                 install_guidance: Some(install_guidance.clone()),
-                installed_after: false,
-                installed_before: false,
-                message: Some(message.clone()),
-                stderr: None,
-                stdout: None,
+                installed: false,
+                interactive: context.interactive
+                    && matches!(context.output_mode, crate::context::OutputMode::Human),
+                launched: false,
             },
         },
         AgxError::new(error_code, message),
