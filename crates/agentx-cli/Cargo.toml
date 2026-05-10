@@ -1,6 +1,7 @@
 [package]
 name = "agentx-cli"
 version = "0.1.0"
+description = "A lifecycle CLI for AI coding agents"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
