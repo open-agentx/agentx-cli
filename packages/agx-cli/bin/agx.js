@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+
+const { existsSync } = require("node:fs");
+const { dirname, resolve } = require("node:path");
+const { spawnSync } = require("node:child_process");
+
+const platformPackageNames = {
+  "darwin-arm64": "@open-agentx/agentx-cli-darwin-arm64",
+  "darwin-x64": "@open-agentx/agentx-cli-darwin-x64",
+  "linux-arm64": "@open-agentx/agentx-cli-linux-arm64",
+  "linux-x64": "@open-agentx/agentx-cli-linux-x64",
+  "win32-arm64": "@open-agentx/agentx-cli-win32-arm64",
+  "win32-x64": "@open-agentx/agentx-cli-win32-x64"
+};
+
+function resolveBinary() {
+  if (process.env.AGX_BINARY_PATH && existsSync(process.env.AGX_BINARY_PATH)) {
+    return process.env.AGX_BINARY_PATH;
+  }
+
+  const key = `${process.platform}-${process.arch}`;
+  const packageName = platformPackageNames[key];
+  const binaryName = process.platform === "win32" ? "agx.exe" : "agx";
+  if (packageName) {
+    try {
+      return require.resolve(`${packageName}/bin/${binaryName}`);
+    } catch {
+      // Fall through to workspace development lookup.
+    }
+  }
+
+  const workspaceBinary = resolve(
+    dirname(__filename),
+    "..",
+    "..",
+    "agentx-cli",
+    "bin",
+    "agx.js"
+  );
+  if (existsSync(workspaceBinary)) {
+    return workspaceBinary;
+  }
+
+  throw new Error(
+    `No AGX native binary found for ${key}. Reinstall agx-cli or set AGX_BINARY_PATH.`
+  );
+}
+
+const binary = resolveBinary();
+const result = spawnSync(process.execPath, [binary, ...process.argv.slice(2)], {
+  stdio: "inherit"
+});
+
+if (result.error) {
+  console.error(result.error.message);
+  process.exit(1);
+}
+
+process.exit(result.status ?? 1);

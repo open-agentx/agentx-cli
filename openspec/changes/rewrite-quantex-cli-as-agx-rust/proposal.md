@@ -34,7 +34,7 @@ The reference `quantex-cli` is a TypeScript/Bun lifecycle CLI for AI coding agen
 
 ## Impact
 
-- Affected code: `crates/agentx-cli`, package launcher files under `packages/`, release scripts, GitHub Actions, fixtures, and project-memory docs.
+- Affected code: `crates/agentx-cli`, `crates/agents-cli`, package launcher files under `packages/`, release scripts, GitHub Actions, fixtures, and project-memory docs.
 - Affected specs: CLI surface, agent catalog, lifecycle commands, config surface, self-upgrade, package distribution, development workflow, and project memory.
 - Tests and fixtures must distinguish stable compatibility fields from environment-specific values such as timestamps, run ids, absolute paths, and installed tool availability.
 - Release automation must build native binaries, verify launch behavior, and publish checksummed artifacts.

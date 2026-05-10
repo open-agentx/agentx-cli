@@ -33,9 +33,11 @@ Use this runbook when preparing AGX release assets and npm/Bun packages.
 
 ## Package Shape
 
+- `agx-cli` is an unscoped compatibility wrapper that forwards to `@open-agentx/agentx-cli`.
 - `@open-agentx/agentx-cli` is the main package and exposes the `agx` bin.
 - `@open-agentx/agentx-cli-<os>-<arch>` packages are optional platform packages containing native binaries.
 - The launcher first honors `AGX_BINARY_PATH`, then tries the platform optional package, then falls back to the workspace release binary for development.
+- `agents-cli` is a crates.io compatibility reservation crate; the installable AGX CLI crate remains `agentx-cli`.
 
 ## Release Notes
 

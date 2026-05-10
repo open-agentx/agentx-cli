@@ -1,0 +1,12 @@
+[package]
+name = "agents-cli"
+version = "0.1.0"
+description = "Compatibility reservation crate for the AGX CLI"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+
+[lints]
+workspace = true

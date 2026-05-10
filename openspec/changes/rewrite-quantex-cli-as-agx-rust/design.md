@@ -47,8 +47,10 @@ npm and Bun package paths are installation and launch channels for native binari
 
 Distribution shape:
 
+- unscoped `agx-cli` npm package remains available as a compatibility wrapper that delegates to the scoped package,
 - main package exposes the `agx` executable through a thin launcher,
 - platform packages carry native binaries as optional dependencies,
+- `agents-cli` crates.io compatibility crate reserves the generic bare name and points users to `agentx-cli`,
 - standalone release artifacts remain zero-runtime binaries,
 - release metadata includes a manifest and SHA256 checksum files,
 - CI verifies the package launcher can start the native binary.
