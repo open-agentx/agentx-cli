@@ -102,23 +102,28 @@ pub fn install_agent(
         });
     }
 
-    let Some(package) = agent.npm_package else {
+    let Some((install_type, package, package_install_args)) = preferred_install_target(agent)
+    else {
         return Err(AgxError::new(
             AgxErrorCode::ManualActionRequired,
             format!(
-                "{} does not have a managed npm or Bun package yet.",
+                "{} does not have a managed npm, Bun, or Cargo package yet.",
                 agent.display_name
             ),
         ));
     };
 
-    let install_type = preferred_package_manager();
-    let command = install_command(install_type, package);
+    let command = install_command(install_type, package, package_install_args);
 
     if context.dry_run {
         return Ok(LifecycleResult {
             changed: false,
-            install_state: Some(installed_state(agent, install_type, package)),
+            install_state: Some(installed_state(
+                agent,
+                install_type,
+                package,
+                package_install_args,
+            )),
             installed: false,
             message: Some(format!("Dry run: would run `{}`.", command.join(" "))),
             warnings: Vec::new(),
@@ -126,7 +131,7 @@ pub fn install_agent(
     }
 
     run_external_command(&command, AgxErrorCode::InstallFailed)?;
-    let installed_state = installed_state(agent, install_type, package);
+    let installed_state = installed_state(agent, install_type, package, package_install_args);
     state::set_installed_agent_state(installed_state.clone())?;
     Ok(LifecycleResult {
         changed: true,
@@ -297,6 +302,14 @@ pub fn update_agents_by_type(install_type: &str, packages: &[String]) -> Result<
         return Ok(());
     }
 
+    if install_type == "cargo" {
+        for package in unique_packages {
+            let command = update_command("cargo", &package, &[]);
+            run_external_command(&command, AgxErrorCode::UpdateFailed)?;
+        }
+        return Ok(());
+    }
+
     let command = update_many_command(install_type, &unique_packages)?;
     run_external_command(&command, AgxErrorCode::UpdateFailed)
 }
@@ -327,41 +340,63 @@ fn update_managed_agent(
     latest_version: Option<String>,
     context: &CliContext,
 ) -> Result<UpdateResult, AgxError> {
-    let (install_type, package_name) = if let Some(installed_state) = installed_state {
-        let Some(package_name) = installed_state.package_name.as_deref() else {
+    let (install_type, package_name, package_install_args) =
+        if let Some(installed_state) = installed_state {
+            let Some(package_name) = installed_state.package_name.as_deref() else {
+                return Ok(UpdateResult {
+                    display_name: agent.display_name.to_string(),
+                    hint: None,
+                    installed_version,
+                    latest_version,
+                    name: agent.name.to_string(),
+                    message: Some("No managed package is recorded for this agent.".to_string()),
+                    resource: None,
+                    status: "manual-required",
+                    strategy: None,
+                });
+            };
+            (
+                installed_state.install_type.as_str(),
+                package_name,
+                installed_state
+                    .package_install_args
+                    .clone()
+                    .unwrap_or_default(),
+            )
+        } else if let Some((install_type, package_name, _package_install_args)) =
+            preferred_install_target(agent)
+        {
+            (
+                install_type,
+                package_name,
+                if install_type == "cargo" {
+                    agent
+                        .cargo_install_args
+                        .iter()
+                        .map(|arg| (*arg).to_string())
+                        .collect()
+                } else {
+                    Vec::new()
+                },
+            )
+        } else {
             return Ok(UpdateResult {
                 display_name: agent.display_name.to_string(),
-                hint: None,
+                hint: Some(get_update_failure_hint(agent, "manual-hint")),
                 installed_version,
                 latest_version,
                 name: agent.name.to_string(),
-                message: Some("No managed package is recorded for this agent.".to_string()),
+                message: Some(format!(
+                    "{} uses a manually managed install source. Please check for updates manually.",
+                    agent.display_name
+                )),
                 resource: None,
                 status: "manual-required",
-                strategy: None,
+                strategy: Some("manual-hint".to_string()),
             });
         };
-        (installed_state.install_type.as_str(), package_name)
-    } else if let Some(package_name) = agent.npm_package {
-        (preferred_package_manager(), package_name)
-    } else {
-        return Ok(UpdateResult {
-            display_name: agent.display_name.to_string(),
-            hint: Some(get_update_failure_hint(agent, "manual-hint")),
-            installed_version,
-            latest_version,
-            name: agent.name.to_string(),
-            message: Some(format!(
-                "{} uses a manually managed install source. Please check for updates manually.",
-                agent.display_name
-            )),
-            resource: None,
-            status: "manual-required",
-            strategy: Some("manual-hint".to_string()),
-        });
-    };
 
-    let command = update_command(install_type, package_name);
+    let command = update_command(install_type, package_name, &package_install_args);
     let strategy = Some(format!("managed/{install_type}"));
 
     if context.dry_run {
@@ -480,6 +515,18 @@ fn preferred_package_manager() -> &'static str {
     }
 }
 
+fn preferred_install_target(
+    agent: AgentDefinition,
+) -> Option<(&'static str, &'static str, &'static [&'static str])> {
+    if let Some(npm_package) = agent.npm_package {
+        return Some((preferred_package_manager(), npm_package, &[]));
+    }
+
+    agent
+        .cargo_package
+        .map(|cargo_package| ("cargo", cargo_package, agent.cargo_install_args))
+}
+
 fn npm_bun_update_strategy() -> &'static str {
     let config = config::load_effective_config();
     match config
@@ -491,7 +538,11 @@ fn npm_bun_update_strategy() -> &'static str {
     }
 }
 
-fn install_command(install_type: &str, package: &str) -> Vec<String> {
+fn install_command(
+    install_type: &str,
+    package: &str,
+    package_install_args: &[&str],
+) -> Vec<String> {
     match install_type {
         "npm" => vec![
             "npm".to_string(),
@@ -499,6 +550,11 @@ fn install_command(install_type: &str, package: &str) -> Vec<String> {
             "-g".to_string(),
             package.to_string(),
         ],
+        "cargo" => std::iter::once("cargo".to_string())
+            .chain(["install"].into_iter().map(str::to_string))
+            .chain(std::iter::once(package.to_string()))
+            .chain(package_install_args.iter().map(|arg| (*arg).to_string()))
+            .collect(),
         _ => vec![
             "bun".to_string(),
             "add".to_string(),
@@ -508,7 +564,11 @@ fn install_command(install_type: &str, package: &str) -> Vec<String> {
     }
 }
 
-fn update_command(install_type: &str, package: &str) -> Vec<String> {
+fn update_command(
+    install_type: &str,
+    package: &str,
+    package_install_args: &[String],
+) -> Vec<String> {
     let strategy = npm_bun_update_strategy();
     match (install_type, strategy) {
         ("npm", "respect-semver") => vec![
@@ -529,6 +589,12 @@ fn update_command(install_type: &str, package: &str) -> Vec<String> {
             "-g".to_string(),
             package.to_string(),
         ],
+        ("cargo", _) => std::iter::once("cargo".to_string())
+            .chain(["install"].into_iter().map(str::to_string))
+            .chain(std::iter::once(package.to_string()))
+            .chain(std::iter::once("--force".to_string()))
+            .chain(package_install_args.iter().cloned())
+            .collect(),
         _ => vec![
             "bun".to_string(),
             "update".to_string(),
@@ -558,6 +624,12 @@ fn update_many_command(install_type: &str, packages: &[String]) -> Result<Vec<St
             .chain(["update", "-g", "--latest"].into_iter().map(str::to_string))
             .chain(packages.iter().cloned())
             .collect()),
+        ("cargo", _) if packages.len() == 1 => Ok(vec![
+            "cargo".to_string(),
+            "install".to_string(),
+            packages[0].clone(),
+            "--force".to_string(),
+        ]),
         _ => Err(AgxError::new(
             AgxErrorCode::InvalidArgument,
             format!("Unsupported managed update type: {install_type}"),
@@ -573,6 +645,11 @@ fn uninstall_command(install_type: &str, package: &str) -> Vec<String> {
             "-g".to_string(),
             package.to_string(),
         ],
+        "cargo" => vec![
+            "cargo".to_string(),
+            "uninstall".to_string(),
+            package.to_string(),
+        ],
         _ => vec![
             "bun".to_string(),
             "remove".to_string(),
@@ -586,12 +663,23 @@ fn installed_state(
     agent: AgentDefinition,
     install_type: &str,
     package: &str,
+    package_install_args: &[&str],
 ) -> InstalledAgentState {
     InstalledAgentState {
         agent_name: agent.name.to_string(),
         install_type: install_type.to_string(),
         package_name: Some(package.to_string()),
         package_target_kind: Some("package".to_string()),
+        package_install_args: if package_install_args.is_empty() {
+            None
+        } else {
+            Some(
+                package_install_args
+                    .iter()
+                    .map(|arg| (*arg).to_string())
+                    .collect(),
+            )
+        },
         command: None,
     }
 }
@@ -613,7 +701,7 @@ fn infer_existing_install_state(
                 None
             };
         if let Some(install_type) = install_type {
-            return Some(installed_state(agent, install_type, package_name));
+            return Some(installed_state(agent, install_type, package_name, &[]));
         }
     }
 
@@ -625,6 +713,7 @@ fn infer_existing_install_state(
                 install_type: "script".to_string(),
                 package_name: None,
                 package_target_kind: None,
+                package_install_args: None,
                 command: Some((*command).to_string()),
             });
     }
@@ -713,7 +802,7 @@ fn update_strategy(
     if installed_state.is_some_and(|state| {
         matches!(
             state.install_type.as_str(),
-            "bun" | "npm" | "brew" | "winget"
+            "bun" | "npm" | "brew" | "cargo" | "winget"
         )
     }) {
         "managed"
@@ -723,7 +812,7 @@ fn update_strategy(
         || (installed_state.is_some() && !crate::agents::self_update_commands(agent).is_empty())
     {
         "self-update"
-    } else if agent.npm_package.is_some() {
+    } else if agent.npm_package.is_some() || agent.cargo_package.is_some() {
         "managed"
     } else if installed_state
         .and_then(|state| state.command.as_ref())

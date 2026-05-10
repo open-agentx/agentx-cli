@@ -8,6 +8,10 @@ pub struct AgentDefinition {
     pub binary_name: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub npm_package: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cargo_package: Option<&'static str>,
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub cargo_install_args: &'static [&'static str],
 }
 
 pub fn all_agents() -> &'static [AgentDefinition] {
@@ -42,11 +46,12 @@ pub fn self_update_commands(agent: AgentDefinition) -> Vec<&'static str> {
         "pi" => vec!["pi update"],
         "qoder" => vec!["qodercli update"],
         "reasonix" => vec!["reasonix update"],
+        "vtcode" => vec!["vtcode update"],
         _ => Vec::new(),
     }
 }
 
-const AGENTS: [AgentDefinition; 27] = [
+const AGENTS: [AgentDefinition; 28] = [
     AgentDefinition {
         name: "auggie",
         aliases: &[],
@@ -54,6 +59,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://docs.augmentcode.com/cli/overview",
         binary_name: "auggie",
         npm_package: Some("@augmentcode/auggie"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "autohand",
@@ -62,6 +69,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://autohand.ai/cli/",
         binary_name: "autohand",
         npm_package: Some("autohand-cli"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "amp",
@@ -70,6 +79,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://ampcode.com/",
         binary_name: "amp",
         npm_package: Some("@sourcegraph/amp"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "claude",
@@ -78,6 +89,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://code.claude.com/docs",
         binary_name: "claude",
         npm_package: Some("@anthropic-ai/claude-code"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "codebuddy",
@@ -86,6 +99,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://www.codebuddy.cn/docs/cli/installation",
         binary_name: "codebuddy",
         npm_package: Some("@tencent-ai/codebuddy-code"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "codex",
@@ -94,6 +109,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://developers.openai.com/codex/cli",
         binary_name: "codex",
         npm_package: Some("@openai/codex"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "copilot",
@@ -102,6 +119,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://github.com/features/copilot/cli",
         binary_name: "copilot",
         npm_package: Some("@github/copilot"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "crush",
@@ -110,6 +129,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://github.com/charmbracelet/crush",
         binary_name: "crush",
         npm_package: Some("@charmland/crush"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "cursor",
@@ -118,6 +139,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://cursor.com/docs/cli",
         binary_name: "agent",
         npm_package: None,
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "deepseek",
@@ -126,6 +149,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://github.com/Hmbown/DeepSeek-TUI",
         binary_name: "deepseek",
         npm_package: Some("deepseek-tui"),
+        cargo_package: Some("deepseek-tui-cli"),
+        cargo_install_args: &["--locked"],
     },
     AgentDefinition {
         name: "devin",
@@ -134,6 +159,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://cli.devin.ai/",
         binary_name: "devin",
         npm_package: None,
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "droid",
@@ -142,6 +169,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://docs.factory.ai/cli/getting-started/overview",
         binary_name: "droid",
         npm_package: Some("droid"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "forgecode",
@@ -150,6 +179,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://forgecode.dev",
         binary_name: "forge",
         npm_package: Some("forgecode"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "gemini",
@@ -158,6 +189,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://google-gemini.github.io/gemini-cli/docs/",
         binary_name: "gemini",
         npm_package: Some("@google/gemini-cli"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "goose",
@@ -166,6 +199,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://github.com/aaif-goose/goose",
         binary_name: "goose",
         npm_package: None,
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "jcode",
@@ -174,6 +209,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://github.com/1jehuang/jcode",
         binary_name: "jcode",
         npm_package: None,
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "junie",
@@ -182,6 +219,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://junie.jetbrains.com/docs/junie-cli.html",
         binary_name: "junie",
         npm_package: Some("@jetbrains/junie"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "kilo",
@@ -190,6 +229,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://kilo.ai/docs/cli",
         binary_name: "kilo",
         npm_package: Some("@kilocode/cli"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "kimi",
@@ -198,6 +239,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://moonshotai.github.io/kimi-cli/",
         binary_name: "kimi",
         npm_package: None,
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "kiro",
@@ -206,6 +249,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://kiro.dev/cli/",
         binary_name: "kiro-cli",
         npm_package: None,
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "openhands",
@@ -214,6 +259,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://docs.openhands.dev/openhands/usage/cli/installation",
         binary_name: "openhands",
         npm_package: None,
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "opencode",
@@ -222,6 +269,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://opencode.ai",
         binary_name: "opencode",
         npm_package: Some("opencode-ai"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "pi",
@@ -230,6 +279,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://pi.dev",
         binary_name: "pi",
         npm_package: Some("@mariozechner/pi-coding-agent"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "qoder",
@@ -238,6 +289,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://docs.qoder.com/cli/quick-start",
         binary_name: "qodercli",
         npm_package: Some("@qoder-ai/qodercli"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "qwen",
@@ -246,6 +299,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://qwenlm.github.io/qwen-code-docs/",
         binary_name: "qwen",
         npm_package: Some("@qwen-code/qwen-code"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "reasonix",
@@ -254,6 +309,8 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://github.com/esengine/DeepSeek-Reasonix",
         binary_name: "reasonix",
         npm_package: Some("reasonix"),
+        cargo_package: None,
+        cargo_install_args: &[],
     },
     AgentDefinition {
         name: "vibe",
@@ -262,5 +319,17 @@ const AGENTS: [AgentDefinition; 27] = [
         homepage: "https://docs.mistral.ai/mistral-vibe/terminal/install",
         binary_name: "vibe",
         npm_package: None,
+        cargo_package: None,
+        cargo_install_args: &[],
+    },
+    AgentDefinition {
+        name: "vtcode",
+        aliases: &[],
+        display_name: "VTCode",
+        homepage: "https://github.com/vinhnx/vtcode",
+        binary_name: "vtcode",
+        npm_package: None,
+        cargo_package: Some("vtcode"),
+        cargo_install_args: &[],
     },
 ];

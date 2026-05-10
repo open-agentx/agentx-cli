@@ -35,6 +35,7 @@ pub struct DoctorAgent {
 pub struct Installers {
     pub brew: bool,
     pub bun: bool,
+    pub cargo: bool,
     pub npm: bool,
     pub winget: bool,
 }
@@ -80,6 +81,7 @@ pub fn run_doctor(context: &CliContext) -> DoctorData {
     let installers = Installers {
         brew: inspection::find_binary_in_path("brew").is_some(),
         bun: inspection::find_binary_in_path("bun").is_some(),
+        cargo: inspection::find_binary_in_path("cargo").is_some(),
         npm: inspection::find_binary_in_path("npm").is_some(),
         winget: inspection::find_binary_in_path("winget").is_some(),
     };
@@ -170,13 +172,18 @@ fn doctor_issues(
 ) -> Vec<DoctorIssue> {
     let mut issues = Vec::new();
 
-    if !installers.bun && !installers.npm && !installers.brew && !installers.winget {
+    if !installers.bun
+        && !installers.npm
+        && !installers.brew
+        && !installers.cargo
+        && !installers.winget
+    {
         issues.push(DoctorIssue {
             blocking: true,
             category: "installers",
             code: "NO_MANAGED_INSTALLER",
             docs_ref: Some("docs/runbooks/quantex-troubleshooting.md"),
-            message: "No managed installer found. Install bun, npm, brew, or winget before relying on managed lifecycle operations.".to_string(),
+            message: "No managed installer found. Install bun, npm, brew, cargo, or winget before relying on managed lifecycle operations.".to_string(),
             severity: "warning",
             subject: IssueSubject {
                 kind: "system",

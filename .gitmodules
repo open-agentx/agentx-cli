@@ -1,4 +1,4 @@
 [submodule "quantex-cli"]
 	path = quantex-cli
 	url = https://github.com/Drswith/quantex-cli.git
-	branch = v0.15.1
+	branch = main

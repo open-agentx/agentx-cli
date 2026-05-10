@@ -515,7 +515,7 @@ fn render_capabilities(result: &CommandResult, painter: &Painter) {
     );
 
     println!("\n{}:", painter.bold("Installers"));
-    for installer in ["bun", "npm", "brew", "winget"] {
+    for installer in ["bun", "npm", "brew", "cargo", "winget"] {
         let available = data["installers"][installer]["available"]
             .as_bool()
             .unwrap_or(false);
@@ -611,7 +611,7 @@ fn render_schema(result: &CommandResult, painter: &Painter) {
     println!("{}\n", painter.bold("AGX Schemas"));
     if let Some(commands) = data["commands"].as_array() {
         for command in commands {
-            println!("  {}", command["name"].as_str().unwrap_or("unknown"),);
+            println!("  {}", command["name"].as_str().unwrap_or("unknown"));
             println!("    {}", command["description"].as_str().unwrap_or(""));
         }
     }
@@ -683,6 +683,14 @@ fn render_doctor(data: &Value, painter: &Painter) {
     println!(
         "  brew:  {}",
         if data["installers"]["brew"].as_bool().unwrap_or(false) {
+            painter.green("available")
+        } else {
+            painter.red("not found")
+        }
+    );
+    println!(
+        "  cargo: {}",
+        if data["installers"]["cargo"].as_bool().unwrap_or(false) {
             painter.green("available")
         } else {
             painter.red("not found")

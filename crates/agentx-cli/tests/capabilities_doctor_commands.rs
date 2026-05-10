@@ -18,6 +18,7 @@ fn capabilities_json_reports_controlled_installer_availability() {
     let json = stdout_json(&output);
     assert_eq!(json["action"], "capabilities");
     assert_eq!(json["data"]["installers"]["bun"]["available"], true);
+    assert_eq!(json["data"]["installers"]["cargo"]["available"], false);
     assert_eq!(json["data"]["installers"]["npm"]["available"], false);
     assert_eq!(
         json["data"]["features"]["execInstallPolicies"][1],
@@ -94,7 +95,28 @@ fn doctor_json_reports_self_install_source_and_missing_installers() {
     assert_eq!(json["action"], "doctor");
     assert_eq!(json["data"]["self"]["installSource"], "bun");
     assert_eq!(json["data"]["installers"]["bun"], false);
+    assert_eq!(json["data"]["installers"]["cargo"], false);
     assert_eq!(json["data"]["installers"]["npm"], false);
+}
+
+#[test]
+fn doctor_json_reports_cargo_installer_availability() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("cargo");
+
+    let output = run_agx(&workspace, &["--json", "doctor"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installers"]["cargo"], true);
+    let issues = json["data"]["issues"]
+        .as_array()
+        .expect("issues should be an array");
+    assert!(
+        !issues
+            .iter()
+            .any(|issue| issue["code"] == "NO_MANAGED_INSTALLER")
+    );
 }
 
 #[test]

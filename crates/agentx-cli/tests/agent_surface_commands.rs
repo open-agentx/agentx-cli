@@ -647,3 +647,36 @@ fn info_exposes_reasonix_catalog_entry() {
         "reasonix update"
     );
 }
+
+#[test]
+fn info_exposes_vtcode_catalog_entry_from_latest_quantex() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "info", "vtcode"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["agent"]["name"], "vtcode");
+    assert_eq!(json["data"]["agent"]["displayName"], "VTCode");
+    assert_eq!(json["data"]["agent"]["binaryName"], "vtcode");
+    assert_eq!(
+        json["data"]["agent"]["selfUpdateCommands"][0],
+        "vtcode update"
+    );
+    assert!(json["data"]["agent"]["packageName"].is_null());
+}
+
+#[test]
+fn inspect_exposes_cargo_install_methods_from_latest_quantex() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "inspect", "deepseek"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let methods = json["data"]["capabilities"]["installMethods"]
+        .as_array()
+        .expect("install methods should be an array");
+    assert!(methods.iter().any(|method| {
+        method["type"] == "cargo" && method["command"] == "cargo install deepseek-tui-cli --locked"
+    }));
+    assert_eq!(json["data"]["capabilities"]["canAutoInstall"], true);
+}

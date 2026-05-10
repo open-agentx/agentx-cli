@@ -405,6 +405,7 @@ struct FeatureCapabilities {
 struct InstallerCapabilities {
     brew: InstallerAvailability,
     bun: InstallerAvailability,
+    cargo: InstallerAvailability,
     npm: InstallerAvailability,
     winget: InstallerAvailability,
 }
@@ -497,6 +498,7 @@ fn capabilities_command(context: &CliContext) -> CommandResult {
             installers: InstallerCapabilities {
                 brew: installer_availability("brew"),
                 bun: installer_availability("bun"),
+                cargo: installer_availability("cargo"),
                 npm: installer_availability("npm"),
                 winget: installer_availability("winget"),
             },
@@ -995,6 +997,7 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
 
                     if inspection.latest_version.is_none()
                         && agent.npm_package.is_none()
+                        && agent.cargo_package.is_none()
                         && agents::self_update_commands(*agent).is_empty()
                     {
                         let result = package_manager::UpdateResult {
@@ -1019,7 +1022,10 @@ fn update_command(agent_name: Option<&str>, all: bool, context: &CliContext) -> 
                     }
 
                     if let Some(installed_state) = installed_state.as_ref()
-                        && matches!(installed_state.install_type.as_str(), "bun" | "npm")
+                        && matches!(
+                            installed_state.install_type.as_str(),
+                            "bun" | "npm" | "cargo"
+                        )
                         && installed_state.package_name.is_some()
                     {
                         grouped_updates
@@ -2537,6 +2543,7 @@ fn installer_capabilities_schema() -> JsonSchema {
     object_schema(vec![
         ("brew", installer_availability_schema()),
         ("bun", installer_availability_schema()),
+        ("cargo", installer_availability_schema()),
         ("npm", installer_availability_schema()),
         ("winget", installer_availability_schema()),
     ])
@@ -2841,7 +2848,7 @@ fn agent_capabilities(agent: AgentDefinition) -> AgentCapabilities {
     let can_self_update = !self_update_commands.is_empty();
 
     AgentCapabilities {
-        can_auto_install: agent.npm_package.is_some(),
+        can_auto_install: agent.npm_package.is_some() || agent.cargo_package.is_some(),
         can_auto_uninstall: inspection.installed && inspection.lifecycle == "managed",
         can_run: inspection.installed,
         can_self_update,
@@ -2865,7 +2872,7 @@ fn resolved_agent_inspection(
 }
 
 fn install_methods(agent: AgentDefinition) -> Vec<InstallMethodInfo> {
-    agent.npm_package.map_or_else(Vec::new, |package| {
+    let mut methods = agent.npm_package.map_or_else(Vec::new, |package| {
         vec![
             InstallMethodInfo {
                 command: format!("bun add -g {package}"),
@@ -2878,7 +2885,22 @@ fn install_methods(agent: AgentDefinition) -> Vec<InstallMethodInfo> {
                 method_type: "npm",
             },
         ]
-    })
+    });
+
+    if let Some(package) = agent.cargo_package {
+        let args = if agent.cargo_install_args.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", agent.cargo_install_args.join(" "))
+        };
+        methods.push(InstallMethodInfo {
+            command: format!("cargo install {package}{args}"),
+            label: "cargo",
+            method_type: "cargo",
+        });
+    }
+
+    methods
 }
 
 fn lifecycle_for(installed_state: Option<&crate::state::InstalledAgentState>) -> &'static str {
@@ -2900,6 +2922,7 @@ fn install_source_kind(install_type: &str) -> &'static str {
         "bun" => "bun",
         "npm" => "npm",
         "brew" => "brew",
+        "cargo" => "cargo",
         "winget" => "winget",
         "script" => "script",
         "binary" => "binary",
@@ -2949,7 +2972,7 @@ fn update_label_for(
 }
 
 fn is_managed_install_type(install_type: &str) -> bool {
-    matches!(install_type, "bun" | "npm" | "brew" | "winget")
+    matches!(install_type, "bun" | "npm" | "brew" | "cargo" | "winget")
 }
 
 fn format_package_target(package_name: Option<&str>, package_target_kind: Option<&str>) -> String {

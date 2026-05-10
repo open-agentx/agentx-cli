@@ -17,6 +17,8 @@ pub struct InstalledAgentState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub package_target_kind: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub package_install_args: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
 }
 

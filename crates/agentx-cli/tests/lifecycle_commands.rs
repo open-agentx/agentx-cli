@@ -34,6 +34,40 @@ fn install_dry_run_returns_planned_managed_state() {
 }
 
 #[test]
+fn install_dry_run_supports_cargo_managed_agents() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--json", "--dry-run", "install", "vtcode"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installState"]["installType"], "cargo");
+    assert_eq!(json["data"]["installState"]["packageName"], "vtcode");
+    assert!(
+        json["data"]["message"]
+            .as_str()
+            .expect("dry-run message should exist")
+            .contains("cargo install vtcode")
+    );
+}
+
+#[test]
+fn install_cargo_agent_records_managed_state() {
+    let workspace = TestWorkspace::new();
+
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "install", "vtcode"],
+        &[("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1")],
+    );
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert_eq!(json["data"]["installed"], true);
+    assert_eq!(json["data"]["installState"]["installType"], "cargo");
+    assert_eq!(json["data"]["installState"]["packageName"], "vtcode");
+}
+
+#[test]
 fn install_reports_already_installed_when_binary_exists() {
     let workspace = TestWorkspace::new();
     workspace.install_fake_agent_binary("qodercli");
@@ -188,7 +222,7 @@ fn install_manual_only_agent_requires_manual_action() {
         json["error"]["message"]
             .as_str()
             .expect("message should exist")
-            .contains("does not have a managed npm or Bun package yet")
+            .contains("does not have a managed npm, Bun, or Cargo package yet")
     );
 }
 
@@ -506,6 +540,36 @@ fn uninstall_dry_run_uses_recorded_managed_package() {
             .as_str()
             .expect("message should exist")
             .contains("npm uninstall -g @qoder-ai/qodercli")
+    );
+}
+
+#[test]
+fn uninstall_dry_run_uses_recorded_cargo_package() {
+    let workspace = TestWorkspace::new();
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "vtcode": {
+      "agentName": "vtcode",
+      "installType": "cargo",
+      "packageName": "vtcode",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let output = run_agx(&workspace, &["--json", "--dry-run", "uninstall", "vtcode"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    assert!(
+        json["data"]["message"]
+            .as_str()
+            .expect("message should exist")
+            .contains("cargo uninstall vtcode")
     );
 }
 
@@ -856,6 +920,43 @@ fn update_single_bun_latest_major_uses_bun_update_latest() {
     assert!(output.status.success());
     let captured = fs::read_to_string(capture_path).expect("capture file should exist");
     assert!(captured.contains("bun update -g --latest @qoder-ai/qodercli"));
+}
+
+#[test]
+fn update_single_cargo_uses_force_install_with_recorded_args() {
+    let workspace = TestWorkspace::new();
+    let capture_path = workspace.root().join("commands.log");
+    workspace.install_fake_agent_binary("deepseek");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "deepseek": {
+      "agentName": "deepseek",
+      "installType": "cargo",
+      "packageName": "deepseek-tui-cli",
+      "packageTargetKind": "package",
+      "packageInstallArgs": ["--locked"]
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+
+    let capture = capture_path.to_string_lossy().into_owned();
+    let output = run_agx_with_env(
+        &workspace,
+        &["--json", "update", "deepseek"],
+        &[
+            ("AGX_TEST_ALLOW_EXTERNAL_SUCCESS", "1"),
+            ("AGX_TEST_CAPTURE_COMMAND_PATH", &capture),
+            ("AGX_TEST_LATEST_PACKAGE_DEEPSEEK_TUI_CLI", "0.2.0"),
+        ],
+    );
+
+    assert!(output.status.success());
+    let captured = fs::read_to_string(capture_path).expect("capture file should exist");
+    assert!(captured.contains("cargo install deepseek-tui-cli --force --locked"));
 }
 
 #[test]
