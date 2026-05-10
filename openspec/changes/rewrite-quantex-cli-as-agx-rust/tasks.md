@@ -68,6 +68,7 @@
 - [x] 4.3.26 Close remaining `doctor` contract parity gaps from `quantex-cli/src/commands/doctor.ts`, including removal of AGX-only top-level fields and limiting unmanaged manual-update issues to outdated installs.
 - [x] 4.3.27 Close remaining discovery render and `info` contract parity gaps from `quantex-cli/src/commands/{commands,schema,info,resolve}.ts`, including `Try:` resolve guidance, removal of helper footer text, and omission of `updateLabel` from `info` inspection payloads.
 - [x] 4.3.28 Close remaining `--color` parity gaps by honoring `auto`, `always`, and `never` in human output rendering.
+- [x] 4.3.29 Close remaining Windows npm parity and list readability gaps by executing managed npm operations through the native Windows launcher while keeping human `list` output aligned with `quantex-cli`.
 - [x] 4.4 Add AGX agent workflow bootstrap, OpenSpec README/config, and project-memory spec.
 - [x] 4.5 Add task-start and worktree runbooks.
 - [x] 4.6 Add Rust workspace architecture ADR.

@@ -802,14 +802,22 @@ fn render_list(result: &CommandResult, painter: &Painter) {
                 painter.dim("not installed")
             };
             let version = agent["installedVersion"].as_str().unwrap_or("");
-            let update = agent["updateLabel"].as_str().unwrap_or("");
-            let source = agent["sourceLabel"].as_str().unwrap_or("");
             let version_text = if installed {
                 if version.is_empty() {
-                    "unknown version".to_string()
+                    painter.dim("unknown version")
                 } else {
-                    version.to_string()
+                    painter.dim(version)
                 }
+            } else {
+                String::new()
+            };
+            let update = if installed {
+                painter.cyan(agent["updateLabel"].as_str().unwrap_or(""))
+            } else {
+                String::new()
+            };
+            let source = if installed {
+                painter.dim(agent["sourceLabel"].as_str().unwrap_or(""))
             } else {
                 String::new()
             };
@@ -818,7 +826,7 @@ fn render_list(result: &CommandResult, painter: &Painter) {
                 if version_text.is_empty() {
                     String::new()
                 } else {
-                    format!("  {}", painter.cyan(&version_text))
+                    format!("  {version_text}")
                 },
                 if update.is_empty() && source.is_empty() {
                     String::new()

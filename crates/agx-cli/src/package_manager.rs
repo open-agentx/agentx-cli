@@ -682,12 +682,15 @@ fn run_external_command(command: &[String], error_code: AgxErrorCode) -> Result<
         ));
     };
 
-    let output = Command::new(program).args(args).output().map_err(|error| {
-        AgxError::new(
-            error_code,
-            format!("Failed to run `{}`: {error}", command.join(" ")),
-        )
-    })?;
+    let output = Command::new(executable_program(program))
+        .args(args)
+        .output()
+        .map_err(|error| {
+            AgxError::new(
+                error_code,
+                format!("Failed to run `{}`: {error}", command.join(" ")),
+            )
+        })?;
 
     if output.status.success() {
         Ok(())
@@ -751,7 +754,7 @@ fn shell_words(command: &str) -> Vec<String> {
 }
 
 fn get_npm_installed_package_version(package_name: &str) -> Option<String> {
-    let output = Command::new("npm")
+    let output = Command::new(executable_program("npm"))
         .args(["list", "-g", "--depth=0", "--json"])
         .output()
         .ok()?;
@@ -766,7 +769,10 @@ fn get_npm_installed_package_version(package_name: &str) -> Option<String> {
 }
 
 fn get_bun_installed_package_version(package_name: &str) -> Option<String> {
-    let output = Command::new("bun").args(["pm", "-g", "ls"]).output().ok()?;
+    let output = Command::new(executable_program("bun"))
+        .args(["pm", "-g", "ls"])
+        .output()
+        .ok()?;
     if !output.status.success() {
         return None;
     }
@@ -793,4 +799,12 @@ fn sanitize_env_key(value: &str) -> String {
             }
         })
         .collect()
+}
+
+fn executable_program(program: &str) -> &str {
+    if cfg!(windows) && program.eq_ignore_ascii_case("npm") {
+        "npm.cmd"
+    } else {
+        program
+    }
 }

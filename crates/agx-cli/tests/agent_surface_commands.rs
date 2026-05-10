@@ -111,6 +111,64 @@ fn list_human_output_marks_missing_agents_as_not_installed() {
     let stdout = stdout_text(&output);
     assert!(stdout.contains("Qoder CLI"));
     assert!(stdout.contains("not installed"));
+    assert!(!stdout.contains("not installed  command update"));
+    assert!(!stdout.contains("not installed  manual update"));
+    assert!(!stdout.contains("not installed  untracked"));
+}
+
+#[test]
+fn list_prefers_npm_cmd_for_managed_versions_on_windows_style_paths() {
+    let workspace = TestWorkspace::new();
+    workspace.install_fake_agent_binary("deepseek");
+    workspace.write_state_bytes(
+        br#"{
+  "installedAgents": {
+    "deepseek": {
+      "agentName": "deepseek",
+      "installType": "npm",
+      "packageName": "deepseek-tui",
+      "packageTargetKind": "package"
+    }
+  },
+  "self": {}
+}
+"#,
+    );
+    fs::create_dir_all(workspace.bin_dir()).expect("bin dir should exist");
+    if cfg!(windows) {
+        fs::write(
+            workspace.bin_dir().join("npm"),
+            "this shim should not be executed by managed npm detection\r\n",
+        )
+        .expect("shim file should be written");
+        fs::write(
+            workspace.bin_dir().join("npm.cmd"),
+            "@echo off\r\n\
+echo {\"dependencies\":{\"deepseek-tui\":{\"version\":\"0.8.24\"}}}\r\n",
+        )
+        .expect("npm.cmd should be written");
+    } else {
+        fs::write(
+            workspace.bin_dir().join("npm"),
+            "#!/bin/sh\nprintf '%s\\n' '{\"dependencies\":{\"deepseek-tui\":{\"version\":\"0.8.24\"}}}'\n",
+        )
+        .expect("npm shim should be written");
+    }
+
+    let output = run_agx(&workspace, &["--json", "list"]);
+
+    assert!(output.status.success());
+    let json = stdout_json(&output);
+    let deepseek = json["data"]["agents"]
+        .as_array()
+        .expect("agents should be an array")
+        .iter()
+        .find(|agent| agent["name"] == "deepseek")
+        .expect("deepseek should exist");
+
+    assert_eq!(deepseek["installed"], true);
+    assert_eq!(deepseek["installedVersion"], "0.8.24");
+    assert_eq!(deepseek["sourceLabel"], "managed via npm (deepseek-tui)");
 }
 
 #[test]
