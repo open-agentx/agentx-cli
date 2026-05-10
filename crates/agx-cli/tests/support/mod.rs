@@ -164,6 +164,10 @@ pub fn stdout_text(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).expect("stdout should be utf8")
 }
 
+pub fn stdout_contains_ansi(output: &Output) -> bool {
+    stdout_text(output).contains("\u{1b}[")
+}
+
 fn build_test_path(workspace: &TestWorkspace) -> OsString {
     std::env::join_paths([
         workspace.bin_dir(),

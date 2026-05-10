@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::sync::{Arc, Mutex};
 
 use crate::cli::{Cli, ColorModeArg, LogLevelArg, OutputModeArg};
@@ -151,6 +152,16 @@ impl TryFrom<&Cli> for CliContext {
                 .map(parse_duration_to_ms)
                 .transpose()?,
         })
+    }
+}
+
+impl ColorMode {
+    pub fn enabled(self) -> bool {
+        match self {
+            Self::Always => true,
+            Self::Never => false,
+            Self::Auto => std::io::stdout().is_terminal(),
+        }
     }
 }
 

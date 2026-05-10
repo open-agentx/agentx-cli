@@ -3,7 +3,8 @@ mod support;
 use std::fs;
 
 use support::{
-    TestWorkspace, run_agx, run_agx_with_env, stdout_json, stdout_json_lines, stdout_text,
+    TestWorkspace, run_agx, run_agx_with_env, stdout_contains_ansi, stdout_json, stdout_json_lines,
+    stdout_text,
 };
 
 #[test]
@@ -53,6 +54,24 @@ fn capabilities_ndjson_emits_single_result_event() {
     assert_eq!(lines[0]["action"], "capabilities");
     assert_eq!(lines[0]["meta"]["mode"], "ndjson");
     assert_eq!(lines[0]["data"]["data"]["outputModes"][1], "json");
+}
+
+#[test]
+fn capabilities_human_output_honors_color_always() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--color", "always", "capabilities"]);
+
+    assert!(output.status.success());
+    assert!(stdout_contains_ansi(&output));
+}
+
+#[test]
+fn capabilities_human_output_honors_color_never() {
+    let workspace = TestWorkspace::new();
+    let output = run_agx(&workspace, &["--color", "never", "capabilities"]);
+
+    assert!(output.status.success());
+    assert!(!stdout_contains_ansi(&output));
 }
 
 #[test]

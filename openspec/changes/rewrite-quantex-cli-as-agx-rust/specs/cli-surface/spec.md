@@ -50,6 +50,14 @@ AGX SHALL support human, JSON, and NDJSON output modes.
 - THEN AGX emits newline-delimited event envelopes
 - AND the final event contains the command result
 
+#### Scenario: Human output honors color mode selection
+
+- WHEN the user runs a human-readable command with `--color always`
+- THEN AGX emits ANSI color sequences in supported human output views
+- WHEN the user runs the same command with `--color never`
+- THEN AGX emits plain text without ANSI color sequences
+- AND `--color auto` enables color only when stdout is an interactive terminal
+
 ### Requirement: AGX MUST expose machine-readable command and schema contracts
 
 AGX SHALL publish stable command-catalog and schema-catalog metadata for automation and agent tooling.

@@ -1,7 +1,9 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::context::{CliContext, OutputMode};
+use nu_ansi_term::{Color, Style};
+
+use crate::context::{CliContext, ColorMode, OutputMode};
 use crate::errors::{AgxError, AgxErrorCode};
 
 const SCHEMA_VERSION: &str = "1";
@@ -253,7 +255,7 @@ impl CommandResult {
 pub fn emit_result(result: &CommandResult, context: &CliContext) -> Result<(), serde_json::Error> {
     match context.output_mode {
         OutputMode::Human => {
-            render_human(result);
+            render_human(result, &Painter::new(context.color_mode));
             Ok(())
         }
         OutputMode::Json => {
@@ -373,26 +375,78 @@ fn create_ndjson_event<'a>(result: &'a CommandResult, context: &CliContext) -> i
     }
 }
 
-fn render_human(result: &CommandResult) {
+struct Painter {
+    enabled: bool,
+}
+
+impl Painter {
+    fn new(color_mode: ColorMode) -> Self {
+        Self {
+            enabled: color_mode.enabled(),
+        }
+    }
+
+    fn paint<'a>(&self, style: Style, value: &'a str) -> String {
+        if self.enabled {
+            style.paint(value).to_string()
+        } else {
+            value.to_string()
+        }
+    }
+
+    fn bold(&self, value: &str) -> String {
+        self.paint(Style::new().bold(), value)
+    }
+
+    fn cyan(&self, value: &str) -> String {
+        self.paint(Color::Cyan.normal(), value)
+    }
+
+    fn dim(&self, value: &str) -> String {
+        self.paint(Style::new().dimmed(), value)
+    }
+
+    fn green(&self, value: &str) -> String {
+        self.paint(Color::Green.normal(), value)
+    }
+
+    fn red(&self, value: &str) -> String {
+        self.paint(Color::Red.normal(), value)
+    }
+
+    fn yellow(&self, value: &str) -> String {
+        self.paint(Color::Yellow.normal(), value)
+    }
+
+    fn yes(&self) -> String {
+        self.green("yes")
+    }
+
+    fn no(&self) -> String {
+        self.red("no")
+    }
+}
+
+fn render_human(result: &CommandResult, painter: &Painter) {
     match result.action.as_str() {
-        "commands" => render_commands(result),
-        "schema" => render_schema(result),
-        "capabilities" => render_capabilities(result),
+        "commands" => render_commands(result, painter),
+        "schema" => render_schema(result, painter),
+        "capabilities" => render_capabilities(result, painter),
         "doctor" => {
             if let Some(data) = &result.data {
-                render_doctor(data);
+                render_doctor(data, painter);
             }
         }
-        "ensure" => render_ensure(result),
-        "exec" => render_exec(result),
-        "install" => render_install(result),
-        "list" => render_list(result),
-        "info" => render_info(result),
-        "inspect" => render_inspect(result),
-        "resolve" => render_resolve(result),
-        "uninstall" => render_uninstall(result),
-        "upgrade" => render_upgrade(result),
-        "update" => render_update(result),
+        "ensure" => render_ensure(result, painter),
+        "exec" => render_exec(result, painter),
+        "install" => render_install(result, painter),
+        "list" => render_list(result, painter),
+        "info" => render_info(result, painter),
+        "inspect" => render_inspect(result, painter),
+        "resolve" => render_resolve(result, painter),
+        "uninstall" => render_uninstall(result, painter),
+        "upgrade" => render_upgrade(result, painter),
+        "update" => render_update(result, painter),
         _ => {
             if let Some(error) = &result.error {
                 eprintln!("{}", error.message);
@@ -421,13 +475,13 @@ fn render_default_human(action: &str, data: &Value) {
     }
 }
 
-fn render_capabilities(result: &CommandResult) {
+fn render_capabilities(result: &CommandResult, painter: &Painter) {
     let Some(data) = &result.data else {
         println!("AGX Capabilities");
         return;
     };
 
-    println!("AGX Capabilities\n");
+    println!("{}\n", painter.bold("AGX Capabilities"));
     println!(
         "Platform: {}/{}",
         data["platform"]["os"].as_str().unwrap_or("unknown"),
@@ -460,18 +514,22 @@ fn render_capabilities(result: &CommandResult) {
             .unwrap_or_default()
     );
 
-    println!("\nInstallers:");
+    println!("\n{}:", painter.bold("Installers"));
     for installer in ["bun", "npm", "brew", "winget"] {
         let available = data["installers"][installer]["available"]
             .as_bool()
             .unwrap_or(false);
         println!(
             "  {installer}: {}",
-            if available { "available" } else { "not found" }
+            if available {
+                painter.green("available")
+            } else {
+                painter.red("not found")
+            }
         );
     }
 
-    println!("\nFeatures:");
+    println!("\n{}:", painter.bold("Features"));
     for (label, key, mode) in [
         ("--yes", "assumeYes", "bool"),
         ("cache-refresh", "cacheRefresh", "bool"),
@@ -499,57 +557,58 @@ fn render_capabilities(result: &CommandResult) {
                 },
             )
         } else if data["features"][key].as_bool().unwrap_or(false) {
-            "yes".to_string()
+            painter.yes()
         } else {
-            "no".to_string()
+            painter.no()
         };
         println!("  {label}: {value}");
     }
     println!();
 }
 
-fn render_commands(result: &CommandResult) {
+fn render_commands(result: &CommandResult, painter: &Painter) {
     let Some(data) = &result.data else {
         println!("AGX Commands");
         return;
     };
 
-    println!("AGX Commands\n");
+    println!("{}\n", painter.bold("AGX Commands"));
     if let Some(commands) = data["commands"].as_array() {
         for command in commands {
-            println!(
-                "  {}{}",
-                command["name"].as_str().unwrap_or("unknown"),
-                command["flags"]
-                    .as_array()
-                    .map(|flags| {
-                        let joined = flags
-                            .iter()
-                            .filter_map(|flag| flag.as_str())
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        if joined.is_empty() {
-                            String::new()
-                        } else {
-                            format!(" [{joined}]")
-                        }
-                    })
-                    .unwrap_or_default()
-            );
+            let name = painter.cyan(command["name"].as_str().unwrap_or("unknown"));
+            let flags = command["flags"]
+                .as_array()
+                .map(|flags| {
+                    let joined = flags
+                        .iter()
+                        .filter_map(|flag| flag.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    if joined.is_empty() {
+                        String::new()
+                    } else {
+                        painter.dim(&format!(" [{joined}]"))
+                    }
+                })
+                .unwrap_or_default();
+            println!("  {}{}", name, flags);
             println!("    {}", command["summary"].as_str().unwrap_or(""));
-            println!("    {}", command["outputSchemaRef"].as_str().unwrap_or(""));
+            println!(
+                "    {}",
+                painter.dim(command["outputSchemaRef"].as_str().unwrap_or(""))
+            );
         }
     }
     println!();
 }
 
-fn render_schema(result: &CommandResult) {
+fn render_schema(result: &CommandResult, painter: &Painter) {
     let Some(data) = &result.data else {
         println!("AGX Schemas");
         return;
     };
 
-    println!("AGX Schemas\n");
+    println!("{}\n", painter.bold("AGX Schemas"));
     if let Some(commands) = data["commands"].as_array() {
         for command in commands {
             println!("  {}", command["name"].as_str().unwrap_or("unknown"),);
@@ -602,43 +661,43 @@ fn render_config(data: &Value) {
 }
 
 #[allow(clippy::too_many_lines)]
-fn render_doctor(data: &Value) {
-    println!("AGX Environment Check\n");
-    println!("Managed Installers:");
+fn render_doctor(data: &Value, painter: &Painter) {
+    println!("{}\n", painter.bold("AGX Environment Check"));
+    println!("{}:", painter.bold("Managed Installers"));
     println!(
         "  Bun:   {}",
         if data["installers"]["bun"].as_bool().unwrap_or(false) {
-            "available"
+            painter.green("available")
         } else {
-            "not found"
+            painter.red("not found")
         }
     );
     println!(
         "  npm:   {}",
         if data["installers"]["npm"].as_bool().unwrap_or(false) {
-            "available"
+            painter.green("available")
         } else {
-            "not found"
+            painter.red("not found")
         }
     );
     println!(
         "  brew:  {}",
         if data["installers"]["brew"].as_bool().unwrap_or(false) {
-            "available"
+            painter.green("available")
         } else {
-            "not found"
+            painter.red("not found")
         }
     );
     println!(
         "  winget:{}",
         if data["installers"]["winget"].as_bool().unwrap_or(false) {
-            "available"
+            painter.green("available")
         } else {
-            "not found"
+            painter.red("not found")
         }
     );
 
-    println!("\nAGX CLI:");
+    println!("\n{}:", painter.bold("AGX CLI"));
     println!(
         "  Version:      {}",
         data["self"]["currentVersion"].as_str().unwrap_or("unknown")
@@ -650,9 +709,9 @@ fn render_doctor(data: &Value) {
     println!(
         "  Auto-update:  {}",
         if data["self"]["canAutoUpdate"].as_bool().unwrap_or(false) {
-            "supported"
+            painter.green("supported")
         } else {
-            "unsupported"
+            painter.yellow("unsupported")
         }
     );
     if let Some(latest) = data["self"]["latestVersion"].as_str() {
@@ -670,12 +729,12 @@ fn render_doctor(data: &Value) {
         println!("  Recovery:     {recovery}");
     }
 
-    println!("\nInstalled Agents:");
+    println!("\n{}:", painter.bold("Installed Agents"));
     if data["agents"]
         .as_array()
         .is_some_and(std::vec::Vec::is_empty)
     {
-        println!("  No agents installed");
+        println!("  {}", painter.dim("No agents installed"));
     } else if let Some(agents) = data["agents"].as_array() {
         for agent in agents {
             println!(
@@ -685,10 +744,10 @@ fn render_doctor(data: &Value) {
                 agent["lifecycle"].as_str().unwrap_or("unknown"),
                 agent["sourceLabel"].as_str().unwrap_or("unknown"),
                 if agent["outdated"].as_bool().unwrap_or(false) {
-                    format!(
+                    painter.yellow(&format!(
                         " (update available: {})",
                         agent["latestVersion"].as_str().unwrap_or("unknown")
-                    )
+                    ))
                 } else {
                     String::new()
                 }
@@ -696,17 +755,17 @@ fn render_doctor(data: &Value) {
         }
     }
 
-    println!("\nIssues:");
+    println!("\n{}:", painter.bold("Issues"));
     if data["issues"]
         .as_array()
         .is_some_and(std::vec::Vec::is_empty)
     {
-        println!("  No issues found.");
+        println!("  {}", painter.green("No issues found."));
     } else if let Some(issues) = data["issues"].as_array() {
         for issue in issues {
             println!(
                 "  - {}",
-                issue["message"].as_str().unwrap_or("unknown issue")
+                painter.yellow(issue["message"].as_str().unwrap_or("unknown issue"))
             );
             if let Some(commands) = issue["suggestedCommands"].as_array()
                 && !commands.is_empty()
@@ -715,7 +774,10 @@ fn render_doctor(data: &Value) {
                     .iter()
                     .filter_map(|command| command.as_str())
                     .collect();
-                println!("    Next: {}", next.join(" | "));
+                println!(
+                    "    {}",
+                    painter.dim(&format!("Next: {}", next.join(" | ")))
+                );
             }
         }
     }
@@ -723,8 +785,8 @@ fn render_doctor(data: &Value) {
     println!();
 }
 
-fn render_list(result: &CommandResult) {
-    println!("AI Agents:\n");
+fn render_list(result: &CommandResult, painter: &Painter) {
+    println!("{}\n", painter.bold("AI Agents:"));
     if let Some(agents) = result
         .data
         .as_ref()
@@ -735,9 +797,9 @@ fn render_list(result: &CommandResult) {
             let name = agent["displayName"].as_str().unwrap_or("unknown");
             let name_padded = format!("{name:<18}");
             let status = if installed {
-                "installed"
+                painter.green("installed")
             } else {
-                "not installed"
+                painter.dim("not installed")
             };
             let version = agent["installedVersion"].as_str().unwrap_or("");
             let update = agent["updateLabel"].as_str().unwrap_or("");
@@ -756,7 +818,7 @@ fn render_list(result: &CommandResult) {
                 if version_text.is_empty() {
                     String::new()
                 } else {
-                    format!("  {version_text}")
+                    format!("  {}", painter.cyan(&version_text))
                 },
                 if update.is_empty() && source.is_empty() {
                     String::new()
@@ -773,9 +835,9 @@ fn render_list(result: &CommandResult) {
     println!();
 }
 
-fn render_info(result: &CommandResult) {
+fn render_info(result: &CommandResult, painter: &Painter) {
     if let Some(error) = &result.error {
-        println!("{}", error.message);
+        println!("{}", painter.red(&error.message));
         return;
     }
     let Some(data) = &result.data else {
@@ -784,7 +846,7 @@ fn render_info(result: &CommandResult) {
 
     println!(
         "{}\n",
-        data["agent"]["displayName"].as_str().unwrap_or("Agent")
+        painter.bold(data["agent"]["displayName"].as_str().unwrap_or("Agent"))
     );
     println!(
         "  Name:         {}",
@@ -829,9 +891,9 @@ fn render_info(result: &CommandResult) {
     println!(
         "  Installed:    {}",
         if data["inspection"]["installed"].as_bool().unwrap_or(false) {
-            "Yes"
+            painter.green("Yes")
         } else {
-            "No"
+            painter.red("No")
         }
     );
     if let Some(source) = data["inspection"]["sourceLabel"].as_str() {
@@ -851,12 +913,12 @@ fn render_info(result: &CommandResult) {
     if let Some(path) = data["inspection"]["binaryPath"].as_str() {
         println!("  Path:         {path}");
     }
-    println!("\n  Install Methods:");
+    println!("\n  {}:", painter.bold("Install Methods"));
     if let Some(methods) = data["agent"]["installMethods"].as_array() {
         for method in methods {
             println!(
                 "    [{}] {}",
-                human_install_method_label(method),
+                painter.green(&human_install_method_label(method)),
                 method["command"].as_str().unwrap_or("")
             );
         }
@@ -865,9 +927,9 @@ fn render_info(result: &CommandResult) {
 }
 
 #[allow(clippy::too_many_lines)]
-fn render_inspect(result: &CommandResult) {
+fn render_inspect(result: &CommandResult, painter: &Painter) {
     if let Some(error) = &result.error {
-        println!("{}", error.message);
+        println!("{}", painter.red(&error.message));
         return;
     }
     let Some(data) = &result.data else {
@@ -876,7 +938,7 @@ fn render_inspect(result: &CommandResult) {
 
     println!(
         "{}\n",
-        data["agent"]["displayName"].as_str().unwrap_or("Agent")
+        painter.bold(data["agent"]["displayName"].as_str().unwrap_or("Agent"))
     );
     println!(
         "  Name:         {}",
@@ -907,9 +969,9 @@ fn render_inspect(result: &CommandResult) {
     println!(
         "  Installed:    {}",
         if data["inspection"]["installed"].as_bool().unwrap_or(false) {
-            "Yes"
+            painter.green("Yes")
         } else {
-            "No"
+            painter.red("No")
         }
     );
     println!(
@@ -942,29 +1004,29 @@ fn render_inspect(result: &CommandResult) {
     if let Some(path) = data["inspection"]["binaryPath"].as_str() {
         println!("  Path:         {path}");
     }
-    println!("\n  Capabilities:");
+    println!("\n  {}:", painter.bold("Capabilities"));
     println!(
         "    auto-install:   {}",
-        yes_no(data["capabilities"]["canAutoInstall"].as_bool())
+        yes_no(data["capabilities"]["canAutoInstall"].as_bool(), painter)
     );
     println!(
         "    self-update:    {}",
-        yes_no(data["capabilities"]["canSelfUpdate"].as_bool())
+        yes_no(data["capabilities"]["canSelfUpdate"].as_bool(), painter)
     );
     println!(
         "    auto-uninstall: {}",
-        yes_no(data["capabilities"]["canAutoUninstall"].as_bool())
+        yes_no(data["capabilities"]["canAutoUninstall"].as_bool(), painter)
     );
     println!(
         "    runnable:       {}",
-        yes_no(data["capabilities"]["canRun"].as_bool())
+        yes_no(data["capabilities"]["canRun"].as_bool(), painter)
     );
-    println!("\n  Install Methods:");
+    println!("\n  {}:", painter.bold("Install Methods"));
     if let Some(methods) = data["agent"]["installMethods"].as_array() {
         for method in methods {
             println!(
                 "    [{}] {}",
-                human_install_method_label(method),
+                painter.green(&human_install_method_label(method)),
                 method["command"].as_str().unwrap_or("")
             );
         }
@@ -972,25 +1034,25 @@ fn render_inspect(result: &CommandResult) {
     println!();
 }
 
-fn render_resolve(result: &CommandResult) {
+fn render_resolve(result: &CommandResult, painter: &Painter) {
     let Some(data) = &result.data else {
         if let Some(error) = &result.error {
-            println!("{}", error.message);
+            println!("{}", painter.red(&error.message));
         }
         return;
     };
 
     if let Some(error) = &result.error {
-        println!("{}", error.message);
+        println!("{}", painter.red(&error.message));
         if let Some(guidance) = data["resolution"]["installGuidance"].as_object() {
             if let Some(ensure) = guidance["suggestedEnsureCommand"].as_str() {
-                println!("Try: {ensure}");
+                println!("{}", painter.dim(&format!("Try: {ensure}")));
             }
             if let Some(methods) = guidance["installMethods"].as_array() {
                 for method in methods {
                     let label = method["label"].as_str().unwrap_or("unknown");
                     let command = method["command"].as_str().unwrap_or("");
-                    println!("Install: [{label}] {command}");
+                    println!("{}", painter.dim(&format!("Install: [{label}] {command}")));
                 }
             }
         }
@@ -1000,14 +1062,14 @@ fn render_resolve(result: &CommandResult) {
         if let Some(ensure) =
             data["resolution"]["installGuidance"]["suggestedEnsureCommand"].as_str()
         {
-            println!("Try: {ensure}");
+            println!("{}", painter.dim(&format!("Try: {ensure}")));
         }
         return;
     }
 
     println!(
         "{}\n",
-        data["agent"]["displayName"].as_str().unwrap_or("Agent")
+        painter.bold(data["agent"]["displayName"].as_str().unwrap_or("Agent"))
     );
     println!(
         "  Name:          {}",
@@ -1043,20 +1105,20 @@ fn render_resolve(result: &CommandResult) {
     println!();
 }
 
-fn render_upgrade(result: &CommandResult) {
+fn render_upgrade(result: &CommandResult, painter: &Painter) {
     if let Some(error) = &result.error {
         if let Some(data) = &result.data {
             if data["status"].as_str() == Some("check-unavailable") {
-                println!("{}", error.message);
-                render_upgrade_informational_warnings(&result.warnings);
+                println!("{}", painter.red(&error.message));
+                render_upgrade_informational_warnings(&result.warnings, painter);
                 return;
             }
             if data["status"].as_str() == Some("manual-required")
                 && matches!(error.code, AgxErrorCode::ManualActionRequired)
             {
-                println!("{}", error.message);
+                println!("{}", painter.red(&error.message));
                 if let Some(recovery_hint) = data["recoveryHint"].as_str() {
-                    println!("Next step: {recovery_hint}");
+                    println!("{}", painter.dim(&format!("Next step: {recovery_hint}")));
                 }
                 return;
             }
@@ -1066,11 +1128,11 @@ fn render_upgrade(result: &CommandResult) {
                 |latest| format!(" ({current} -> {latest})"),
             );
             println!("Upgrading AGX CLI...{version_hint}");
-            println!("Failed to upgrade AGX CLI.");
-            println!("Reason: {}", error.message);
-            render_upgrade_failure_warnings(&result.warnings);
+            println!("{}", painter.red("Failed to upgrade AGX CLI."));
+            println!("{} {}", painter.red("Reason:"), error.message);
+            render_upgrade_failure_warnings(&result.warnings, painter);
         } else {
-            println!("{}", error.message);
+            println!("{}", painter.red(&error.message));
         }
         return;
     }
@@ -1089,13 +1151,21 @@ fn render_upgrade(result: &CommandResult) {
                 .iter()
                 .any(|warning| warning.code == "DRY_RUN");
             let prefix = if dry_run { "Dry run: " } else { "" };
-            println!("{prefix}Update available for AGX CLI: {current} -> {latest} ({channel}).");
-            render_upgrade_informational_warnings(&result.warnings);
+            println!(
+                "{}",
+                painter.yellow(&format!(
+                    "{prefix}Update available for AGX CLI: {current} -> {latest} ({channel})."
+                ))
+            );
+            render_upgrade_informational_warnings(&result.warnings, painter);
         }
         "up-to-date" => {
             let current = data["currentVersion"].as_str().unwrap_or("unknown");
-            println!("AGX is already up to date ({current}).");
-            render_upgrade_informational_warnings(&result.warnings);
+            println!(
+                "{}",
+                painter.green(&format!("AGX is already up to date ({current})."))
+            );
+            render_upgrade_informational_warnings(&result.warnings, painter);
         }
         "planned" => {
             println!("Planned AGX upgrade:");
@@ -1107,7 +1177,7 @@ fn render_upgrade(result: &CommandResult) {
                     .join(" ");
                 println!("{command}");
             }
-            render_upgrade_informational_warnings(&result.warnings);
+            render_upgrade_informational_warnings(&result.warnings, painter);
         }
         "updated" => {
             let current = data["currentVersion"].as_str().unwrap_or("unknown");
@@ -1116,40 +1186,42 @@ fn render_upgrade(result: &CommandResult) {
                 |latest| format!(" ({current} -> {latest})"),
             );
             println!("Upgrading AGX CLI...{version_hint}");
-            println!("AGX CLI upgraded successfully.");
-            render_upgrade_informational_warnings(&result.warnings);
+            println!("{}", painter.green("AGX CLI upgraded successfully."));
+            render_upgrade_informational_warnings(&result.warnings, painter);
         }
         _ => println!("{data}"),
     }
 }
 
-fn render_upgrade_informational_warnings(warnings: &[CommandWarning]) {
+fn render_upgrade_informational_warnings(warnings: &[CommandWarning], painter: &Painter) {
     for warning in warnings {
         if matches!(warning.code.as_str(), "DRY_RUN" | "MANUAL_RECOVERY") {
             continue;
         }
-        println!("{}", warning.message);
+        println!("{}", painter.yellow(&warning.message));
     }
 }
 
-fn render_upgrade_failure_warnings(warnings: &[CommandWarning]) {
+fn render_upgrade_failure_warnings(warnings: &[CommandWarning], painter: &Painter) {
     for warning in warnings {
         if warning.code == "MANUAL_RECOVERY" {
             println!(
                 "{}",
-                warning
-                    .message
-                    .replacen("Manual recovery:", "Next step:", 1)
+                painter.dim(
+                    &warning
+                        .message
+                        .replacen("Manual recovery:", "Next step:", 1),
+                )
             );
         } else if warning.code != "DRY_RUN" {
-            println!("{}", warning.message);
+            println!("{}", painter.yellow(&warning.message));
         }
     }
 }
 
-fn render_update(result: &CommandResult) {
+fn render_update(result: &CommandResult, painter: &Painter) {
     if let Some(error) = &result.error {
-        println!("{}", error.message);
+        println!("{}", painter.red(&error.message));
     }
 
     let Some(data) = &result.data else {
@@ -1163,7 +1235,10 @@ fn render_update(result: &CommandResult) {
             match status {
                 "up-to-date" => {
                     let version = result["installedVersion"].as_str().unwrap_or("unknown");
-                    println!("{name} is up to date ({version})");
+                    println!(
+                        "{}",
+                        painter.green(&format!("{name} is up to date ({version})"))
+                    );
                 }
                 "updated" => {
                     let strategy = result["strategy"].as_str().unwrap_or("update");
@@ -1175,19 +1250,25 @@ fn render_update(result: &CommandResult) {
                         _ => String::new(),
                     };
                     println!("Updating {name} via {strategy}...{version_text}");
-                    println!("{name} updated successfully!");
+                    println!(
+                        "{}",
+                        painter.green(&format!("{name} updated successfully!"))
+                    );
                 }
                 "planned" => println!(
                     "Dry run: would update {name}. {}",
                     result["message"].as_str().unwrap_or("")
                 ),
                 "manual-required" => {
-                    println!("{name}: manual action required.");
+                    println!(
+                        "{}",
+                        painter.yellow(&format!("{name}: manual action required."))
+                    );
                     if let Some(message) = result["message"].as_str() {
                         println!("{message}");
                     }
                     if let Some(hint) = result["hint"].as_str() {
-                        println!("Next step: {hint}");
+                        println!("{}", painter.dim(&format!("Next step: {hint}")));
                     }
                 }
                 "failed" => {
@@ -1200,9 +1281,9 @@ fn render_update(result: &CommandResult) {
                         _ => String::new(),
                     };
                     println!("Updating {name} via {strategy}...{version_text}");
-                    println!("Failed to update {name}.");
+                    println!("{}", painter.red(&format!("Failed to update {name}.")));
                     if let Some(hint) = result["hint"].as_str() {
-                        println!("Next step: {hint}");
+                        println!("{}", painter.dim(&format!("Next step: {hint}")));
                     }
                 }
                 "locked" => println!(
@@ -1216,12 +1297,12 @@ fn render_update(result: &CommandResult) {
         }
 
         if results.len() > 1 {
-            render_update_summary(results);
+            render_update_summary(results, painter);
         }
     }
 }
 
-fn render_install(result: &CommandResult) {
+fn render_install(result: &CommandResult, painter: &Painter) {
     if let Some(error) = &result.error
         && result
             .data
@@ -1230,7 +1311,7 @@ fn render_install(result: &CommandResult) {
             .and_then(serde_json::Value::as_str)
             != Some("batch")
     {
-        eprintln!("{}", error.message);
+        eprintln!("{}", painter.red(&error.message));
         return;
     }
 
@@ -1239,7 +1320,7 @@ fn render_install(result: &CommandResult) {
     };
 
     if data["scope"].as_str() == Some("batch") {
-        render_install_batch(data);
+        render_install_batch(data, painter);
         return;
     }
 
@@ -1269,12 +1350,15 @@ fn render_install(result: &CommandResult) {
     }
 
     println!("Installing {display_name}...");
-    println!("{display_name} installed successfully!");
+    println!(
+        "{}",
+        painter.green(&format!("{display_name} installed successfully!"))
+    );
 }
 
-fn render_ensure(result: &CommandResult) {
+fn render_ensure(result: &CommandResult, painter: &Painter) {
     if let Some(error) = &result.error {
-        eprintln!("{}", error.message);
+        eprintln!("{}", painter.red(&error.message));
         return;
     }
 
@@ -1308,12 +1392,15 @@ fn render_ensure(result: &CommandResult) {
     }
 
     println!("Installing {display_name}...");
-    println!("{display_name} is now installed.");
+    println!(
+        "{}",
+        painter.green(&format!("{display_name} is now installed."))
+    );
 }
 
-fn render_uninstall(result: &CommandResult) {
+fn render_uninstall(result: &CommandResult, painter: &Painter) {
     if let Some(error) = &result.error {
-        eprintln!("{}", error.message);
+        eprintln!("{}", painter.red(&error.message));
         return;
     }
 
@@ -1332,17 +1419,23 @@ fn render_uninstall(result: &CommandResult) {
     }
 
     println!("Uninstalling {display_name}...");
-    println!("{display_name} uninstalled successfully!");
+    println!(
+        "{}",
+        painter.green(&format!("{display_name} uninstalled successfully!"))
+    );
 }
 
-fn render_install_batch(data: &Value) {
+fn render_install_batch(data: &Value, painter: &Painter) {
     if let Some(results) = data["results"].as_array() {
         for item in results {
             let display_name = item["agent"]["displayName"].as_str().unwrap_or("Agent");
             match item["status"].as_str().unwrap_or("unknown") {
                 "installed" => {
                     println!("Installing {display_name}...");
-                    println!("{display_name} installed successfully!");
+                    println!(
+                        "{}",
+                        painter.green(&format!("{display_name} installed successfully!"))
+                    );
                 }
                 "tracked-existing-install" | "already-installed" | "untracked-existing-install" => {
                     let message = first_batch_warning_message(item)
@@ -1359,7 +1452,7 @@ fn render_install_batch(data: &Value) {
                     let message = item["error"]["message"]
                         .as_str()
                         .unwrap_or("Failed to install requested agent.");
-                    eprintln!("{message}");
+                    eprintln!("{}", painter.red(message));
                 }
                 _ => println!("{item}"),
             }
@@ -1393,7 +1486,7 @@ fn first_batch_warning_message(item: &Value) -> Option<&str> {
         .and_then(|warning| warning["message"].as_str())
 }
 
-fn render_update_summary(results: &[Value]) {
+fn render_update_summary(results: &[Value], painter: &Painter) {
     let mut updated = 0;
     let mut up_to_date = 0;
     let mut manual = 0;
@@ -1434,23 +1527,26 @@ fn render_update_summary(results: &[Value]) {
     }
 
     if !parts.is_empty() {
-        println!("Summary: {}", parts.join(", "));
+        println!(
+            "{}",
+            painter.bold(&format!("Summary: {}", parts.join(", ")))
+        );
     }
 }
 
-fn render_exec(result: &CommandResult) {
+fn render_exec(result: &CommandResult, painter: &Painter) {
     if let Some(error) = &result.error {
-        eprintln!("{}", error.message);
+        eprintln!("{}", painter.red(&error.message));
         if let Some(data) = &result.data {
             if let Some(ensure) =
                 data["execution"]["installGuidance"]["suggestedEnsureCommand"].as_str()
             {
-                eprintln!("Try: {ensure}");
+                eprintln!("{}", painter.dim(&format!("Try: {ensure}")));
             }
             if let Some(exec) =
                 data["execution"]["installGuidance"]["suggestedExecCommand"].as_str()
             {
-                eprintln!("Or:  {exec}");
+                eprintln!("{}", painter.dim(&format!("Or:  {exec}")));
             }
         }
         return;
@@ -1490,8 +1586,12 @@ fn render_exec(result: &CommandResult) {
     }
 }
 
-fn yes_no(value: Option<bool>) -> &'static str {
-    if value.unwrap_or(false) { "yes" } else { "no" }
+fn yes_no(value: Option<bool>, painter: &Painter) -> String {
+    if value.unwrap_or(false) {
+        painter.yes()
+    } else {
+        painter.no()
+    }
 }
 
 fn human_install_method_label(method: &Value) -> String {
