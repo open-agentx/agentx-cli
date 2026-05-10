@@ -198,7 +198,7 @@ pub fn record_freshness(context: &CliContext, freshness: CliFreshness) {
         .expect("freshness mutex should not be poisoned");
     if let Some(existing) = slot.as_mut() {
         if freshness.fetched_at < existing.fetched_at {
-            existing.fetched_at = freshness.fetched_at.clone();
+            existing.fetched_at.clone_from(&freshness.fetched_at);
         }
         existing.source = existing.source.merge(freshness.source);
         if freshness.stale_after < existing.stale_after {

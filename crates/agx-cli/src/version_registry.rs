@@ -11,6 +11,9 @@ use crate::context::{CacheMode, CliContext, CliFreshness, FreshnessSource, recor
 use crate::state;
 
 pub const OFFICIAL_NPM_REGISTRY: &str = "https://registry.npmjs.org";
+const ISO_8601_MILLIS: &[time::format_description::FormatItem<'static>] = time::macros::format_description!(
+    "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z"
+);
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 struct CachedResponseStore {
@@ -200,15 +203,17 @@ fn freshness_from_network(fetched_at: u64, stale_after: u64) -> CliFreshness {
 
 fn timestamp_ms_to_iso8601(timestamp_ms: u64) -> String {
     use time::OffsetDateTime;
-    use time::macros::format_description;
 
-    let seconds = (timestamp_ms / 1_000) as i64;
-    let nanos = ((timestamp_ms % 1_000) * 1_000_000) as i32;
-    const ISO_8601_MILLIS: &[time::format_description::FormatItem<'static>] =
-        format_description!("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z");
-    OffsetDateTime::from_unix_timestamp(seconds)
-        .map(|datetime| datetime + time::Duration::nanoseconds(i64::from(nanos)))
-        .ok()
+    let seconds = i64::try_from(timestamp_ms / 1_000).ok();
+    let nanos = i64::try_from((timestamp_ms % 1_000) * 1_000_000).ok();
+
+    seconds
+        .zip(nanos)
+        .and_then(|(seconds, nanos)| {
+            OffsetDateTime::from_unix_timestamp(seconds)
+                .ok()
+                .map(|datetime| datetime + time::Duration::nanoseconds(nanos))
+        })
         .and_then(|datetime| datetime.format(ISO_8601_MILLIS).ok())
         .unwrap_or_else(|| "1970-01-01T00:00:00.000Z".to_string())
 }

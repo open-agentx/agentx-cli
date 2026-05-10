@@ -1,6 +1,66 @@
 mod support;
 
+use serde_json::Value;
 use support::{TestWorkspace, run_agx, stdout_json, stdout_json_lines, stdout_text};
+
+fn command_schema(workspace: &TestWorkspace, command: &str) -> Value {
+    let output = run_agx(workspace, &["--json", "schema", command]);
+    assert!(output.status.success());
+    stdout_json(&output)["data"]["commands"][0].clone()
+}
+
+fn schema_properties<'a>(schema: &'a Value, context: &str) -> &'a [Value] {
+    schema["properties"].as_array().map_or_else(
+        || panic!("{context} properties should be an array"),
+        Vec::as_slice,
+    )
+}
+
+fn find_property<'a>(properties: &'a [Value], name: &str, context: &str) -> &'a Value {
+    properties
+        .iter()
+        .find(|item| item["name"] == name)
+        .unwrap_or_else(|| panic!("{context} property {name} should exist"))
+}
+
+fn assert_required_fields(schema: &Value, required: &[&str], optional: &[&str], context: &str) {
+    let fields = schema["required"].as_array().map_or_else(
+        || panic!("{context} required should be an array"),
+        Vec::as_slice,
+    );
+
+    for field in required {
+        assert!(
+            fields.iter().any(|item| item == field),
+            "{context} should require {field}"
+        );
+    }
+
+    for field in optional {
+        assert!(
+            !fields.iter().any(|item| item == field),
+            "{context} should not require {field}"
+        );
+    }
+}
+
+fn assert_property_presence(schema: &Value, present: &[&str], absent: &[&str], context: &str) {
+    let properties = schema_properties(schema, context);
+
+    for field in present {
+        assert!(
+            properties.iter().any(|item| item["name"] == *field),
+            "{context} should contain property {field}"
+        );
+    }
+
+    for field in absent {
+        assert!(
+            !properties.iter().any(|item| item["name"] == *field),
+            "{context} should not contain property {field}"
+        );
+    }
+}
 
 #[test]
 fn commands_json_includes_core_lifecycle_commands() {
@@ -558,158 +618,85 @@ fn schema_envelope_and_ndjson_meta_require_core_fields() {
 #[test]
 fn schema_optional_fields_are_not_misclassified_as_required() {
     let workspace = TestWorkspace::new();
-
-    let commands_output = run_agx(&workspace, &["--json", "schema", "commands"]);
-    assert!(commands_output.status.success());
-    let commands_json = stdout_json(&commands_output);
-    let commands_schema = &commands_json["data"]["commands"][0];
-
-    let envelope_properties = commands_schema["envelopeSchema"]["properties"]
-        .as_array()
-        .expect("envelope properties should be an array");
-    let error_schema = envelope_properties
-        .iter()
-        .find(|item| item["name"] == "error")
-        .expect("error schema should exist");
-    let error_required = error_schema["schema"]["required"]
-        .as_array()
-        .expect("error required should be an array");
-    assert!(error_required.iter().any(|item| item == "code"));
-    assert!(error_required.iter().any(|item| item == "message"));
-    assert!(!error_required.iter().any(|item| item == "details"));
-
-    let target_schema = envelope_properties
-        .iter()
-        .find(|item| item["name"] == "target")
-        .expect("target schema should exist");
-    let target_required = target_schema["schema"]["required"]
-        .as_array()
-        .expect("target required should be an array");
-    assert!(target_required.iter().any(|item| item == "kind"));
-    assert!(!target_required.iter().any(|item| item == "name"));
-
-    let meta_schema = envelope_properties
-        .iter()
-        .find(|item| item["name"] == "meta")
-        .expect("meta schema should exist");
-    let meta_required = meta_schema["schema"]["required"]
-        .as_array()
-        .expect("meta required should be an array");
-    assert!(!meta_required.iter().any(|item| item == "source"));
-    assert!(!meta_required.iter().any(|item| item == "fetchedAt"));
-    assert!(!meta_required.iter().any(|item| item == "staleAfter"));
-
-    let exec_output = run_agx(&workspace, &["--json", "schema", "exec"]);
-    assert!(exec_output.status.success());
-    let exec_json = stdout_json(&exec_output);
-    let exec_schema = &exec_json["data"]["commands"][0]["dataSchema"]["properties"];
-    let exec_agent = exec_schema
-        .as_array()
-        .expect("exec properties should be an array")
-        .iter()
-        .find(|item| item["name"] == "agent")
-        .expect("exec agent schema should exist");
-    let exec_agent_required = exec_agent["schema"]["required"]
-        .as_array()
-        .expect("exec agent required should be an array");
-    assert!(exec_agent_required.iter().any(|item| item == "name"));
-    assert!(!exec_agent_required.iter().any(|item| item == "binaryName"));
-    assert!(!exec_agent_required.iter().any(|item| item == "displayName"));
-
-    let exec_execution = exec_schema
-        .as_array()
-        .expect("exec properties should be an array")
-        .iter()
-        .find(|item| item["name"] == "execution")
-        .expect("exec execution schema should exist");
-    let exec_required = exec_execution["schema"]["required"]
-        .as_array()
-        .expect("exec execution required should be an array");
-    assert!(exec_required.iter().any(|item| item == "args"));
-    assert!(exec_required.iter().any(|item| item == "installPolicy"));
-    assert!(exec_required.iter().any(|item| item == "installed"));
-    assert!(exec_required.iter().any(|item| item == "interactive"));
-    assert!(exec_required.iter().any(|item| item == "launched"));
-    assert!(!exec_required.iter().any(|item| item == "installGuidance"));
-
-    let resolve_output = run_agx(&workspace, &["--json", "schema", "resolve"]);
-    assert!(resolve_output.status.success());
-    let resolve_json = stdout_json(&resolve_output);
-    let resolve_schema = &resolve_json["data"]["commands"][0]["dataSchema"]["properties"];
-    let resolution = resolve_schema
-        .as_array()
-        .expect("resolve properties should be an array")
-        .iter()
-        .find(|item| item["name"] == "resolution")
-        .expect("resolve resolution schema should exist");
-    let resolution_required = resolution["schema"]["required"]
-        .as_array()
-        .expect("resolution required should be an array");
-    assert!(resolution_required.iter().any(|item| item == "installed"));
-    assert!(
-        resolution_required
-            .iter()
-            .any(|item| item == "installSource")
+    let commands_schema = command_schema(&workspace, "commands");
+    let envelope_properties =
+        schema_properties(&commands_schema["envelopeSchema"], "commands envelope");
+    let error_schema = find_property(envelope_properties, "error", "commands envelope");
+    let target_schema = find_property(envelope_properties, "target", "commands envelope");
+    let meta_schema = find_property(envelope_properties, "meta", "commands envelope");
+    assert_required_fields(
+        &error_schema["schema"],
+        &["code", "message"],
+        &["details"],
+        "error",
     );
-    assert!(resolution_required.iter().any(|item| item == "lifecycle"));
-    assert!(resolution_required.iter().any(|item| item == "sourceLabel"));
-    assert!(
-        resolution_required
-            .iter()
-            .any(|item| item == "suggestedLaunchCommand")
-    );
-    assert!(!resolution_required.iter().any(|item| item == "binaryPath"));
-    assert!(
-        !resolution_required
-            .iter()
-            .any(|item| item == "installGuidance")
-    );
-    assert!(
-        !resolution_required
-            .iter()
-            .any(|item| item == "installedVersion")
+    assert_required_fields(&target_schema["schema"], &["kind"], &["name"], "target");
+    assert_required_fields(
+        &meta_schema["schema"],
+        &[],
+        &["source", "fetchedAt", "staleAfter"],
+        "meta",
     );
 
-    let info_output = run_agx(&workspace, &["--json", "schema", "info"]);
-    assert!(info_output.status.success());
-    let info_json = stdout_json(&info_output);
-    let info_schema = &info_json["data"]["commands"][0]["dataSchema"]["properties"];
-    let inspection = info_schema
-        .as_array()
-        .expect("info properties should be an array")
-        .iter()
-        .find(|item| item["name"] == "inspection")
-        .expect("inspection schema should exist");
-    let inspection_required = inspection["schema"]["required"]
-        .as_array()
-        .expect("inspection required should be an array");
-    assert!(inspection_required.iter().any(|item| item == "installed"));
-    assert!(inspection_required.iter().any(|item| item == "lifecycle"));
-    assert!(!inspection_required.iter().any(|item| item == "sourceLabel"));
-    assert!(!inspection_required.iter().any(|item| item == "updateLabel"));
-    assert!(!inspection_required.iter().any(|item| item == "binaryPath"));
-    assert!(
-        !inspection_required
-            .iter()
-            .any(|item| item == "installedVersion")
+    let exec_schema = command_schema(&workspace, "exec");
+    let exec_properties = schema_properties(&exec_schema["dataSchema"], "exec");
+    let exec_agent = find_property(exec_properties, "agent", "exec");
+    let exec_execution = find_property(exec_properties, "execution", "exec");
+    assert_required_fields(
+        &exec_agent["schema"],
+        &["name"],
+        &["binaryName", "displayName"],
+        "exec agent",
     );
-    assert!(
-        !inspection_required
-            .iter()
-            .any(|item| item == "latestVersion")
+    assert_required_fields(
+        &exec_execution["schema"],
+        &[
+            "args",
+            "installPolicy",
+            "installed",
+            "interactive",
+            "launched",
+        ],
+        &["installGuidance"],
+        "exec execution",
     );
-    let inspection_properties = inspection["schema"]["properties"]
-        .as_array()
-        .expect("inspection properties should be an array");
-    assert!(
-        inspection_properties
-            .iter()
-            .any(|item| item["name"] == "sourceLabel")
+
+    let resolve_schema = command_schema(&workspace, "resolve");
+    let resolve_properties = schema_properties(&resolve_schema["dataSchema"], "resolve");
+    let resolution = find_property(resolve_properties, "resolution", "resolve");
+    assert_required_fields(
+        &resolution["schema"],
+        &[
+            "installed",
+            "installSource",
+            "lifecycle",
+            "sourceLabel",
+            "suggestedLaunchCommand",
+        ],
+        &["binaryPath", "installGuidance", "installedVersion"],
+        "resolve resolution",
     );
-    assert!(
-        !inspection_properties
-            .iter()
-            .any(|item| item["name"] == "updateLabel")
+
+    let info_schema = command_schema(&workspace, "info");
+    let info_properties = schema_properties(&info_schema["dataSchema"], "info");
+    let inspection = find_property(info_properties, "inspection", "info");
+    assert_required_fields(
+        &inspection["schema"],
+        &["installed", "lifecycle"],
+        &[
+            "sourceLabel",
+            "updateLabel",
+            "binaryPath",
+            "installedVersion",
+            "latestVersion",
+        ],
+        "info inspection",
+    );
+    assert_property_presence(
+        &inspection["schema"],
+        &["sourceLabel"],
+        &["updateLabel"],
+        "info inspection",
     );
 }
 

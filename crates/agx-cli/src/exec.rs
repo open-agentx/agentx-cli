@@ -233,7 +233,7 @@ fn run_agent_command(
             )
         })?;
 
-    Ok(AgentCommandOutput::from_output(output))
+    Ok(AgentCommandOutput::from_output(&output))
 }
 
 fn run_agent_command_with_timeout(
@@ -288,7 +288,7 @@ fn run_agent_command_with_timeout(
                     format!("Failed to collect agent output: {error}"),
                 )
             })?;
-            return Ok(AgentCommandOutput::from_output(output));
+            return Ok(AgentCommandOutput::from_output(&output));
         }
 
         if Instant::now() >= deadline {
@@ -309,11 +309,10 @@ struct AgentCommandOutput {
 }
 
 impl AgentCommandOutput {
-    fn from_output(output: std::process::Output) -> Self {
-        let status = output.status;
-
+    fn from_output(output: &std::process::Output) -> Self {
         Self {
-            exit_code: status
+            exit_code: output
+                .status
                 .code()
                 .and_then(|code| u8::try_from(code).ok())
                 .unwrap_or(1),

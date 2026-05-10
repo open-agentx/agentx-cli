@@ -386,7 +386,7 @@ impl Painter {
         }
     }
 
-    fn paint<'a>(&self, style: Style, value: &'a str) -> String {
+    fn paint(&self, style: Style, value: &str) -> String {
         if self.enabled {
             style.paint(value).to_string()
         } else {
@@ -591,7 +591,7 @@ fn render_commands(result: &CommandResult, painter: &Painter) {
                     }
                 })
                 .unwrap_or_default();
-            println!("  {}{}", name, flags);
+            println!("  {name}{flags}");
             println!("    {}", command["summary"].as_str().unwrap_or(""));
             println!(
                 "    {}",
