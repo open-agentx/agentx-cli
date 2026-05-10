@@ -10,9 +10,9 @@ AGX is a Rust-native rewrite of the previous `quantex-cli` command surface. The 
 
 ## Decision
 
-The repository uses a Rust workspace rooted at `Cargo.toml` with the primary CLI crate at `crates/agx-cli`.
+The repository uses a Rust workspace rooted at `Cargo.toml` with the primary CLI crate at `crates/agentx-cli`.
 
-- `crates/agx-cli` owns the `agx` binary and user-facing command surface.
+- `crates/agentx-cli` owns the `agx` binary and user-facing command surface.
 - Command parsing lives in `cli.rs`; dispatch and structured command metadata live in `commands.rs`.
 - Agent catalog, inspection, lifecycle package management, execution, doctor diagnostics, config, state, locks, and self-upgrade each live in separate modules.
 - Cargo artifacts are written to the project-local `target/` directory through `.cargo/config.toml`.

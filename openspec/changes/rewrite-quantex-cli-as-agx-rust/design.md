@@ -6,7 +6,7 @@ AGX uses `quantex-cli` as the behavior reference while replacing the runtime wit
 
 ## Runtime Architecture
 
-The repository is a Rust workspace with the product binary in `crates/agx-cli`.
+The repository is a Rust workspace with the product binary in `crates/agentx-cli`.
 
 Current module boundaries:
 

@@ -8,7 +8,7 @@ Use this runbook when preparing AGX release assets and npm/Bun packages.
 
 - OpenSpec change is valid with `pnpm run openspec:validate`.
 - Rust validation passes locally or in CI.
-- Version numbers match across `crates/agx-cli/Cargo.toml` and package manifests under `packages/`.
+- Version numbers match across `crates/agentx-cli/Cargo.toml` and package manifests under `packages/`.
 
 ## Local Verification
 

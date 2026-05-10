@@ -39,7 +39,7 @@
 
 - [x] 4.1 Capture compatibility fixtures for command catalog, schema summary, agent catalog, and representative error envelope.
 - [x] 4.2 Define fixture update policy.
-- [x] 4.3 Add Rust integration tests under `crates/agx-cli/tests` for CLI contracts, compatible config/state, execution flows, and command-level coverage comparable to `quantex-cli/test/commands`.
+- [x] 4.3 Add Rust integration tests under `crates/agentx-cli/tests` for CLI contracts, compatible config/state, execution flows, and command-level coverage comparable to `quantex-cli/test/commands`.
 - [x] 4.3.1 Close latest `run/exec` parity gaps from `quantex-cli/test/commands/run.test.ts`, including unknown-agent handling, shortcut cancellation/launch failure exit codes, and explicit `--install if-missing` non-interactive execution coverage.
 - [x] 4.3.2 Close latest `resolve` parity gaps from `quantex-cli/test/commands/resolve.test.ts`, including missing-agent install guidance details, installed-version reporting, and human-readable launch metadata.
 - [x] 4.3.3 Close latest `doctor` parity gaps from `quantex-cli/test/commands/doctor.test.ts`, including manual-update guidance for unmanaged PATH agents without a self-update command.
