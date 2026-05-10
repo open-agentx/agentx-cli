@@ -5,7 +5,7 @@ resolver = "3"
 [workspace.package]
 edition = "2024"
 license = "Apache-2.0"
-repository = "https://github.com/Drswith/agents-cli"
+repository = "https://github.com/open-agentx/agentx-cli"
 rust-version = "1.93"
 
 [workspace.lints.rust]

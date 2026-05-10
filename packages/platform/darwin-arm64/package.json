@@ -1,5 +1,5 @@
 {
-  "name": "agxctl-darwin-arm64",
+  "name": "@open-agentx/agentx-cli-darwin-arm64",
   "version": "0.1.0",
   "description": "AGX native binary for macOS arm64",
   "license": "MIT",

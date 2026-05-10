@@ -275,7 +275,7 @@ fn doctor_human_output_shows_bun_recovery_for_outdated_self_install() {
     assert!(output.status.success());
     let stdout = stdout_text(&output);
     assert!(stdout.contains("Recovery:"));
-    assert!(stdout.contains("bun add -g agxctl@latest"));
+    assert!(stdout.contains("bun add -g @open-agentx/agentx-cli@latest"));
 }
 
 #[test]
@@ -488,7 +488,7 @@ fn standalone_manifest_json(version: &str, asset_name: &str, checksum: &str) -> 
             "      \"os\": \"{platform}\",\n",
             "      \"arch\": \"{arch}\",\n",
             "      \"sha256\": \"{checksum}\",\n",
-            "      \"downloadUrl\": \"https://github.com/Drswith/agents-cli/releases/latest/download/{asset_name}\"\n",
+            "      \"downloadUrl\": \"https://github.com/open-agentx/agentx-cli/releases/latest/download/{asset_name}\"\n",
             "    }}\n",
             "  ]\n",
             "}}\n"

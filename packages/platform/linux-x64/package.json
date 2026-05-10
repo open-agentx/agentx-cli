@@ -1,5 +1,5 @@
 {
-  "name": "agxctl-linux-x64",
+  "name": "@open-agentx/agentx-cli-linux-x64",
   "version": "0.1.0",
   "description": "AGX native binary for Linux x64",
   "license": "MIT",

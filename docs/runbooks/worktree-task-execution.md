@@ -16,8 +16,8 @@ Provide the setup and cleanup flow for implementing AGX changes from dedicated g
 ```bash
 git switch main
 git pull --ff-only
-git worktree add -b <agent>/<task-slug> ../agents-cli-<task-slug> main
-git -C ../agents-cli-<task-slug> status --short --branch
+git worktree add -b <agent>/<task-slug> ../agentx-cli-<task-slug> main
+git -C ../agentx-cli-<task-slug> status --short --branch
 ```
 
 ## Implementation Flow
@@ -32,7 +32,7 @@ git -C ../agents-cli-<task-slug> status --short --branch
 After merge or abandonment:
 
 ```bash
-git worktree remove ../agents-cli-<task-slug>
+git worktree remove ../agentx-cli-<task-slug>
 git worktree prune
 ```
 

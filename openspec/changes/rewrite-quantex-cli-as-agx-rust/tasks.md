@@ -32,7 +32,7 @@
 - [x] 3.2 Implement thin npm/Bun launcher for native AGX binaries.
 - [x] 3.3 Generate release manifest and SHA256 checksum metadata.
 - [x] 3.4 Verify the package launcher starts native `agx`.
-- [x] 3.5 Align Rust crate, npm main package, and platform package names on `agxctl`.
+- [x] 3.5 Align Rust crate and package-distribution names on `agentx-cli` / `@open-agentx/agentx-cli`.
 - [ ] 3.6 Build full platform binary release assets.
 
 ## 4. Fixtures and Documentation

@@ -12,7 +12,7 @@ use crate::errors::{AgxError, AgxErrorCode};
 use crate::state;
 use crate::version_registry;
 
-const AGX_PACKAGE_NAME: &str = "agxctl";
+const AGX_PACKAGE_NAME: &str = "@open-agentx/agentx-cli";
 const REPOSITORY_URL: &str = env!("CARGO_PKG_REPOSITORY");
 
 #[derive(Debug, Serialize)]
@@ -438,8 +438,8 @@ fn run_external_command(
         let message = match mode.as_str() {
             "locked" => "Another agx upgrade is already running.",
             "permission" => "Failed to replace the current AGX binary.",
-            "npm" => "Failed to update agxctl through npm.",
-            "bun" => "Failed to update agxctl through Bun.",
+            "npm" => "Failed to update @open-agentx/agentx-cli through npm.",
+            "bun" => "Failed to update @open-agentx/agentx-cli through Bun.",
             _ => "Failed to upgrade AGX.",
         };
         let recovery_hint = if mode == "locked" {
@@ -740,7 +740,7 @@ fn fetch_github_release_summary(
         .build()
         .map_err(|error| AgxError::new(AgxErrorCode::NetworkError, error.to_string()))?
         .get(releases_url)
-        .header(reqwest::header::USER_AGENT, "agxctl-self-upgrade")
+        .header(reqwest::header::USER_AGENT, "agentx-cli-self-upgrade")
         .send()
         .and_then(reqwest::blocking::Response::error_for_status)
         .map_err(|error| {

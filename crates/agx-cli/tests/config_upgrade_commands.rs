@@ -575,11 +575,14 @@ fn upgrade_failure_surfaces_bun_recovery_hint() {
     assert_eq!(json["error"]["code"], "UPGRADE_FAILED");
     assert_eq!(json["error"]["details"]["kind"], "unknown");
     assert_eq!(json["data"]["status"], "manual-required");
-    assert_eq!(json["data"]["recoveryHint"], "bun add -g agxctl@latest");
+    assert_eq!(
+        json["data"]["recoveryHint"],
+        "bun add -g @open-agentx/agentx-cli@latest"
+    );
     assert_eq!(json["warnings"][0]["code"], "MANUAL_RECOVERY");
     assert_eq!(
         json["warnings"][0]["message"],
-        "Manual recovery: bun add -g agxctl@latest"
+        "Manual recovery: bun add -g @open-agentx/agentx-cli@latest"
     );
 }
 
@@ -610,7 +613,10 @@ fn upgrade_failure_surfaces_npm_recovery_hint() {
     assert_eq!(json["error"]["code"], "UPGRADE_FAILED");
     assert_eq!(json["error"]["details"]["kind"], "unknown");
     assert_eq!(json["data"]["status"], "manual-required");
-    assert_eq!(json["data"]["recoveryHint"], "npm install -g agxctl@latest");
+    assert_eq!(
+        json["data"]["recoveryHint"],
+        "npm install -g @open-agentx/agentx-cli@latest"
+    );
     assert_eq!(json["warnings"][0]["code"], "MANUAL_RECOVERY");
 }
 
@@ -641,7 +647,10 @@ fn upgrade_failure_surfaces_lock_retry_hint() {
     assert_eq!(json["error"]["code"], "RESOURCE_LOCKED");
     assert_eq!(json["error"]["details"]["kind"], "locked");
     assert_eq!(json["data"]["status"], "manual-required");
-    assert_eq!(json["data"]["recoveryHint"], "npm install -g agxctl@latest");
+    assert_eq!(
+        json["data"]["recoveryHint"],
+        "npm install -g @open-agentx/agentx-cli@latest"
+    );
     assert_eq!(json["warnings"][0]["code"], "MANUAL_RECOVERY");
     assert!(
         json["error"]["message"]
@@ -721,9 +730,12 @@ fn upgrade_failure_human_output_surfaces_reason_and_next_step() {
     let stdout = stdout_text(&output);
     assert!(stdout.contains("Upgrading AGX CLI... (0.1.0 -> 0.2.0)"));
     assert!(stdout.contains("Failed to upgrade AGX CLI."));
-    assert!(stdout.contains("Reason: Failed to update agxctl through Bun."));
-    assert!(stdout.contains("Next step: bun add -g agxctl@latest"));
-    assert!(!stdout.contains("Reason: Failed to update agxctl through Bun. Next step:"));
+    assert!(stdout.contains("Reason: Failed to update @open-agentx/agentx-cli through Bun."));
+    assert!(stdout.contains("Next step: bun add -g @open-agentx/agentx-cli@latest"));
+    assert!(
+        !stdout
+            .contains("Reason: Failed to update @open-agentx/agentx-cli through Bun. Next step:")
+    );
 }
 
 #[test]
@@ -943,7 +955,7 @@ fn upgrade_check_reads_cached_latest_version_by_default() {
         concat!(
             "{\n",
             "  \"entries\": {\n",
-            "    \"npm:https://registry.npmjs.org:agxctl:latest\": {\n",
+            "    \"npm:https://registry.npmjs.org:@open-agentx/agentx-cli:latest\": {\n",
             "      \"body\": \"{\\\"version\\\":\\\"0.2.0\\\"}\",\n",
             "      \"expiresAt\": 4102444800000,\n",
             "      \"fetchedAt\": 4102441200000\n",
@@ -986,7 +998,7 @@ fn upgrade_check_no_cache_ignores_stale_cached_latest_version() {
         concat!(
             "{\n",
             "  \"entries\": {\n",
-            "    \"npm:https://registry.npmjs.org:agxctl:latest\": {\n",
+            "    \"npm:https://registry.npmjs.org:@open-agentx/agentx-cli:latest\": {\n",
             "      \"body\": \"{\\\"version\\\":\\\"0.2.0\\\"}\",\n",
             "      \"expiresAt\": 4102444800000,\n",
             "      \"fetchedAt\": 4102441200000\n",
@@ -1057,7 +1069,11 @@ fn standalone_manifest_json(
         other => panic!("unsupported test arch: {other}"),
     };
     let download_url = download_url.map_or_else(
-        || format!("https://github.com/Drswith/agents-cli/releases/latest/download/{asset_name}"),
+        || {
+            format!(
+                "https://github.com/open-agentx/agentx-cli/releases/latest/download/{asset_name}"
+            )
+        },
         ToString::to_string,
     );
     format!(

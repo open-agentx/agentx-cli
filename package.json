@@ -1,11 +1,11 @@
 {
-  "name": "agents-cli",
+  "name": "agentx-cli",
   "private": true,
   "description": "AGX Rust rewrite workspace and OpenSpec project memory",
   "packageManager": "pnpm@10.18.3",
   "scripts": {
     "dist:local": "cargo build --workspace --release && node scripts/package-release.mjs",
-    "package:verify": "node packages/agxctl/bin/agx.js --version",
+    "package:verify": "node packages/agentx-cli/bin/agx.js --version",
     "openspec:archive": "openspec archive --yes",
     "openspec:instructions": "openspec instructions --json",
     "openspec:list": "openspec list",

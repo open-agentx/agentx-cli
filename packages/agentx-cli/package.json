@@ -1,0 +1,23 @@
+{
+  "name": "@open-agentx/agentx-cli",
+  "version": "0.1.0",
+  "description": "Rust-native AGX command launcher",
+  "license": "MIT",
+  "bin": {
+    "agx": "bin/agx.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "optionalDependencies": {
+    "@open-agentx/agentx-cli-darwin-arm64": "0.1.0",
+    "@open-agentx/agentx-cli-darwin-x64": "0.1.0",
+    "@open-agentx/agentx-cli-linux-arm64": "0.1.0",
+    "@open-agentx/agentx-cli-linux-x64": "0.1.0",
+    "@open-agentx/agentx-cli-win32-arm64": "0.1.0",
+    "@open-agentx/agentx-cli-win32-x64": "0.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
